@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { sports } from './data/homeData';
 import { getAllTurfs, getBookings, getDemoState, getSession, getTurfOwnerId, saveBookings } from './data/demoStore';
-import GlobalHeader from './GlobalHeader';
+import GlobalHeader, { navItems } from './GlobalHeader';
 
 const formatDate = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not selected';
 const overlaps = (fromTime, toTime, slotFrom, slotTo) => fromTime < slotTo && toTime > slotFrom;
@@ -47,6 +48,7 @@ function BookingPage() {
           ))}
         </div>
       </main>
+      <BookingFooter />
     </div>
   );
 }
@@ -99,7 +101,13 @@ function TurfBookingFlow({ turf }) {
     {stage === 'form' && <BookingForm turf={turf} sports={sports} booking={booking} errors={errors} paymentMethod={paymentMethod} unavailableSlots={unavailableSlots} update={update} setPaymentMethod={setPaymentMethod} onSubmit={submit} />}
     {stage === 'payment' && <PaymentScreen turf={turf} booking={booking} onConfirm={() => confirmBooking('Paid - demo payment')} onBack={() => setStage('form')} />}
     {stage === 'success' && <BookingSuccess turf={turf} booking={booking} />}
-  </main></div>;
+  </main><BookingFooter /></div>;
+}
+
+function BookingFooter() {
+  const navigate = (href) => { window.location.href = href; };
+
+  return <footer className="site-footer"><div className="container footer-grid"><div className="footer-brand"><h3>SPORTS BELONG TO EVERYONE.</h3><p>Building a connected sports community for Vadodara — one game, one venue and one tournament at a time.</p><div className="socials"><a href="https://instagram.com" target="_blank" rel="noreferrer">Instagram</a><a href="https://facebook.com" target="_blank" rel="noreferrer">Facebook</a><a href="https://linkedin.com" target="_blank" rel="noreferrer">LinkedIn</a><a href="https://youtube.com" target="_blank" rel="noreferrer">YouTube</a></div></div><div className="footer-column"><h4>PLATFORM</h4><ul>{navItems.map((item) => <li key={item.label}><button type="button" onClick={() => navigate(item.href)}>{item.label}</button></li>)}</ul></div><div className="footer-column"><h4>SPORTS</h4><ul>{sports.map((sport) => <li key={sport.id}>{sport.name}</li>)}</ul></div><div className="footer-column"><h4>JOIN</h4><ul><li><button type="button" onClick={() => navigate('/login')}>Login</button></li><li><button type="button" onClick={() => navigate('/signup')}>Sign Up</button></li><li><button type="button" onClick={() => navigate('/signup')}>Register Your Turf</button></li></ul></div><div className="footer-column"><h4>ABOUT</h4><ul><li><button type="button" onClick={() => navigate('/about')}>Our Story</button></li><li><button type="button" onClick={() => navigate('/tournaments')}>Tournaments</button></li></ul></div></div><div className="footer-bottom"><div className="container footer-bottom-inner"><span>© 2026 Vadodara Sports Platform. All rights reserved.</span><span>Made for the sports community of Vadodara.</span></div></div></footer>;
 }
 
 function BookingForm({ turf, sports, booking, errors, paymentMethod, unavailableSlots, update, setPaymentMethod, onSubmit }) {
