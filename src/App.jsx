@@ -9,25 +9,7 @@ import { appHref, normalizePath } from './data/routing';
 
 const formatHeroTitle = (title) => title.split('\n').map((line, index) => <span key={index}>{line}</span>);
 
-function App() {
-  const path = normalizePath();
-
-  if (path === '/about') {
-    return <AboutPage />;
-  }
-
-  if (path.startsWith('/tournaments')) {
-    return <TournamentPage />;
-  }
-
-  if (path === '/book-your-turf' || path.startsWith('/book-your-turf/')) {
-    return <BookingPage />;
-  }
-
-  if (['/signup', '/login', '/player', '/turf-owner'].some((route) => path.startsWith(route))) {
-    return <PlayerApp />;
-  }
-
+function HomePage() {
   const [activeSlide, setActiveSlide] = useState(0);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -484,6 +466,26 @@ function App() {
       </footer>
     </div>
   );
+}
+
+function App() {
+  const [path, setPath] = useState(normalizePath);
+
+  useEffect(() => {
+    const updatePath = () => setPath(normalizePath());
+    window.addEventListener('hashchange', updatePath);
+    window.addEventListener('popstate', updatePath);
+    return () => {
+      window.removeEventListener('hashchange', updatePath);
+      window.removeEventListener('popstate', updatePath);
+    };
+  }, []);
+
+  if (path === '/about') return <AboutPage />;
+  if (path.startsWith('/tournaments')) return <TournamentPage />;
+  if (path === '/book-your-turf' || path.startsWith('/book-your-turf/')) return <BookingPage />;
+  if (['/signup', '/login', '/player', '/turf-owner'].some((route) => path.startsWith(route))) return <PlayerApp />;
+  return <HomePage />;
 }
 
 export default App;
