@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { appHref, normalizePath } from './data/routing';
 
 export const navItems = [
   { label: 'Home', href: '/' },
@@ -12,14 +13,14 @@ function GlobalHeader() {
 
   const navigate = (href) => {
     setIsMenuOpen(false);
-    if (href === '/' && window.location.pathname === '/') {
+    if (href === '/' && normalizePath() === '/') {
       document.querySelector('#top')?.scrollIntoView({ behavior: 'smooth' });
       return;
     }
-    window.location.href = href;
+    window.location.href = appHref(href);
   };
 
-  const currentPath = window.location.pathname;
+  const currentPath = normalizePath();
 
   return (
     <header className="topbar">

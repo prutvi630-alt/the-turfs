@@ -69,7 +69,7 @@ img {
 }
 
 .page-shell {
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 .container {
@@ -1376,7 +1376,9 @@ html {
 .idea-content,
 .vadodara-content,
 .about-final-content {
-  width: 100%;
+  width: min(var(--container), calc(100% - 32px));
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .idea-content h2 em,

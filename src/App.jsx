@@ -5,23 +5,26 @@ import TournamentPage from './TournamentPage';
 import PlayerApp from './PlayerApp';
 import BookingPage from './BookingPage';
 import GlobalHeader from './GlobalHeader';
+import { appHref, normalizePath } from './data/routing';
 
 const formatHeroTitle = (title) => title.split('\n').map((line, index) => <span key={index}>{line}</span>);
 
 function App() {
-  if (window.location.pathname === '/about') {
+  const path = normalizePath();
+
+  if (path === '/about') {
     return <AboutPage />;
   }
 
-  if (window.location.pathname.startsWith('/tournaments')) {
+  if (path.startsWith('/tournaments')) {
     return <TournamentPage />;
   }
 
-  if (window.location.pathname === '/book-your-turf' || window.location.pathname.startsWith('/book-your-turf/')) {
+  if (path === '/book-your-turf' || path.startsWith('/book-your-turf/')) {
     return <BookingPage />;
   }
 
-  if (['/signup', '/login', '/player', '/turf-owner'].some((path) => window.location.pathname.startsWith(path))) {
+  if (['/signup', '/login', '/player', '/turf-owner'].some((route) => path.startsWith(route))) {
     return <PlayerApp />;
   }
 
@@ -92,15 +95,15 @@ function App() {
       }
     } else if (href.startsWith('/')) {
       if (href === '/about') {
-        window.location.href = href;
+        window.location.href = appHref(href);
         return;
       }
       if (href === '/tournaments') {
-        window.location.href = href;
+        window.location.href = appHref(href);
         return;
       }
       if (href === '/login' || href === '/signup') {
-        window.location.href = href;
+        window.location.href = appHref(href);
         return;
       }
       const hashTarget = href === '/upcoming-tournaments' ? '#upcoming-tournaments' : href === '/login' ? '#login' : href === '/signup' ? '#signup' : href;
@@ -117,7 +120,7 @@ function App() {
 
   const handleJoin = (label) => {
     const destination = label === 'Register Your Turf' ? '/signup' : label === 'Join as a Player' ? '/signup' : '/login';
-    window.location.href = destination;
+    window.location.href = appHref(destination);
   };
 
   return (

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { sports } from './data/homeData';
 import { getAllTurfs, getBookings, getDemoState, getSession, getTurfOwnerId, saveBookings } from './data/demoStore';
 import GlobalHeader, { navItems } from './GlobalHeader';
+import { appHref, normalizePath } from './data/routing';
 
 const formatDate = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not selected';
 const overlaps = (fromTime, toTime, slotFrom, slotTo) => fromTime < slotTo && toTime > slotFrom;
@@ -15,7 +16,7 @@ const normalizeTurf = (turf = {}) => ({
   sports: Array.isArray(turf.sports) && turf.sports.length ? turf.sports : (Array.isArray(turf.games) ? turf.games : [turf.sport || 'Cricket']),
 });
 
-const getSelectedTurf = () => getAllTurfs().find((turf) => turf.id === window.location.pathname.split('/').filter(Boolean)[1]);
+const getSelectedTurf = () => getAllTurfs().find((turf) => turf.id === normalizePath().split('/').filter(Boolean)[1]);
 
 function BookingPage() {
   const allTurfs = getAllTurfs().map(normalizeTurf);
@@ -33,7 +34,7 @@ function BookingPage() {
         </div>
         <div className="turfs-grid">
           {allTurfs.map((turf) => (
-            <article key={turf.id} className="turf-card" onClick={() => { window.location.href = `/book-your-turf/${turf.id}`; }}>
+            <article key={turf.id} className="turf-card" onClick={() => { window.location.href = appHref(`/book-your-turf/${turf.id}`); }}>
               <div className="turf-image-wrap">
                 <img src={turf.image} alt={turf.name} loading="lazy" />
                 <span className="area-badge">{turf.area || turf.location || 'Vadodara'}</span>
@@ -42,7 +43,7 @@ function BookingPage() {
                 <h2>{turf.name}</h2>
                 <p className="turf-location">{turf.area || turf.location || 'Vadodara'}, Vadodara</p>
                 <div className="meta-line"><span>Sports:</span><strong>{(turf.sports || []).join(' • ')}</strong></div>
-                <button type="button" className="btn btn-primary" onClick={(event) => { event.stopPropagation(); window.location.href = `/book-your-turf/${turf.id}`; }}>Book This Turf</button>
+                <button type="button" className="btn btn-primary" onClick={(event) => { event.stopPropagation(); window.location.href = appHref(`/book-your-turf/${turf.id}`); }}>Book This Turf</button>
               </div>
             </article>
           ))}
@@ -105,7 +106,7 @@ function TurfBookingFlow({ turf }) {
 }
 
 function BookingFooter() {
-  const navigate = (href) => { window.location.href = href; };
+  const navigate = (href) => { window.location.href = appHref(href); };
 
   return <footer className="site-footer"><div className="container footer-grid"><div className="footer-brand"><h3>SPORTS BELONG TO EVERYONE.</h3><p>Building a connected sports community for Vadodara — one game, one venue and one tournament at a time.</p><div className="socials"><a href="https://instagram.com" target="_blank" rel="noreferrer">Instagram</a><a href="https://facebook.com" target="_blank" rel="noreferrer">Facebook</a><a href="https://linkedin.com" target="_blank" rel="noreferrer">LinkedIn</a><a href="https://youtube.com" target="_blank" rel="noreferrer">YouTube</a></div></div><div className="footer-column"><h4>PLATFORM</h4><ul>{navItems.map((item) => <li key={item.label}><button type="button" onClick={() => navigate(item.href)}>{item.label}</button></li>)}</ul></div><div className="footer-column"><h4>SPORTS</h4><ul>{sports.map((sport) => <li key={sport.id}>{sport.name}</li>)}</ul></div><div className="footer-column"><h4>JOIN</h4><ul><li><button type="button" onClick={() => navigate('/login')}>Login</button></li><li><button type="button" onClick={() => navigate('/signup')}>Sign Up</button></li><li><button type="button" onClick={() => navigate('/signup')}>Register Your Turf</button></li></ul></div><div className="footer-column"><h4>ABOUT</h4><ul><li><button type="button" onClick={() => navigate('/about')}>Our Story</button></li><li><button type="button" onClick={() => navigate('/tournaments')}>Tournaments</button></li></ul></div></div><div className="footer-bottom"><div className="container footer-bottom-inner"><span>© 2026 Vadodara Sports Platform. All rights reserved.</span><span>Made for the sports community of Vadodara.</span></div></div></footer>;
 }
@@ -123,6 +124,6 @@ function BookingSelect({ label, value, onChange, options, error }) { return <lab
 function BookingSummary({ turf, booking, paymentMethod }) { return <section className="booking-summary"><div className="form-section-title"><span>SUMMARY</span><h2>Your booking</h2></div><div className="summary-list"><SummaryItem label="Turf Name" value={turf.name} /><SummaryItem label="Selected Game" value={booking.game || 'Not selected'} /><SummaryItem label="Booking Date" value={formatDate(booking.date)} /><SummaryItem label="Time" value={`${booking.fromTime || '--:--'} to ${booking.toTime || '--:--'}`} /><SummaryItem label="User Name" value={booking.name || 'Not entered'} /><SummaryItem label="Mobile" value={booking.mobile || 'Not entered'} /><SummaryItem label="Email" value={booking.email || 'Not entered'} /><SummaryItem label="Total" value={turf.price} /><SummaryItem label="Payment" value={paymentMethod ? (paymentMethod === 'online' ? 'Online Payment' : 'Cash Payment') : 'Not selected'} /></div></section>; }
 function SummaryItem({ label, value }) { return <div><span>{label}</span><strong>{value}</strong></div>; }
 function PaymentScreen({ turf, booking, onConfirm, onBack }) { return <div className="flow-panel payment-screen"><span className="section-kicker">DEMO PAYMENT</span><h1>COMPLETE YOUR PAYMENT.</h1><p>Scan the code or use your preferred payment app to pay for this booking.</p><div className="payment-screen-grid"><div className="qr-code" aria-label="Demo payment QR code" /><div className="payment-details"><SummaryItem label="Amount" value={turf.price} /><SummaryItem label="Turf" value={turf.name} /><SummaryItem label="Game" value={booking.game} /><SummaryItem label="Date & time" value={`${formatDate(booking.date)} · ${booking.fromTime} to ${booking.toTime}`} /></div></div><div className="flow-actions"><button type="button" className="btn btn-secondary" onClick={onBack}>Back to booking</button><button type="button" className="btn btn-primary" onClick={onConfirm}>I have completed payment</button></div></div>; }
-function BookingSuccess({ turf, booking }) { const isOnline = booking.paymentMethod === 'Online'; return <div className="flow-panel success-panel"><span className="success-mark">✓</span><span className="section-kicker">BOOKING CONFIRMED</span><h1>BOOKING SUCCESSFULLY DONE</h1><p className="success-note">{isOnline ? 'Please show your payment proof or payment screenshot when you arrive at the turf.' : 'Please complete the payment first when you arrive at the turf.'}</p><div className="confirmation-details"><SummaryItem label="Turf Name" value={turf.name} /><SummaryItem label="Game" value={booking.game} /><SummaryItem label="Date" value={formatDate(booking.bookingDate)} /><SummaryItem label="From Time" value={booking.fromTime} /><SummaryItem label="To Time" value={booking.toTime} /><SummaryItem label="Payment Method" value={booking.paymentMethod} /><SummaryItem label="Booking Status" value={booking.bookingStatus} /></div><button type="button" className="btn btn-primary" onClick={() => { window.location.href = '/book-your-turf'; }}>Book another turf</button></div>; }
+function BookingSuccess({ turf, booking }) { const isOnline = booking.paymentMethod === 'Online'; return <div className="flow-panel success-panel"><span className="success-mark">✓</span><span className="section-kicker">BOOKING CONFIRMED</span><h1>BOOKING SUCCESSFULLY DONE</h1><p className="success-note">{isOnline ? 'Please show your payment proof or payment screenshot when you arrive at the turf.' : 'Please complete the payment first when you arrive at the turf.'}</p><div className="confirmation-details"><SummaryItem label="Turf Name" value={turf.name} /><SummaryItem label="Game" value={booking.game} /><SummaryItem label="Date" value={formatDate(booking.bookingDate)} /><SummaryItem label="From Time" value={booking.fromTime} /><SummaryItem label="To Time" value={booking.toTime} /><SummaryItem label="Payment Method" value={booking.paymentMethod} /><SummaryItem label="Booking Status" value={booking.bookingStatus} /></div><button type="button" className="btn btn-primary" onClick={() => { window.location.href = appHref('/book-your-turf'); }}>Book another turf</button></div>; }
 
 export default BookingPage;

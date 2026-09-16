@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { sports, turfs } from './data/homeData';
 import { tournaments } from './data/tournaments';
 import GlobalHeader, { navItems } from './GlobalHeader';
+import { appHref, normalizePath } from './data/routing';
 
 const filterOptions = {
   sports: ['All Sports', ...sports.map((sport) => sport.name)],
@@ -18,8 +19,9 @@ function TournamentPage() {
   const [dateRange, setDateRange] = useState('Any Date');
   const [selectedId, setSelectedId] = useState(null);
 
-  const isDetail = window.location.pathname.startsWith('/tournaments/');
-  const routeId = window.location.pathname.split('/').filter(Boolean)[1];
+  const path = normalizePath();
+  const isDetail = path.startsWith('/tournaments/');
+  const routeId = path.split('/').filter(Boolean)[1];
   const selectedTournament = tournaments.find((tournament) => tournament.id === (selectedId || routeId)) || null;
 
   useEffect(() => {
@@ -38,16 +40,15 @@ function TournamentPage() {
   }, [isDetail, selectedId]);
 
   const navigate = (href) => {
-    setIsMenuOpen(false);
     if (href === '/login') {
-      window.location.href = '/login';
+      window.location.href = appHref('/login');
       return;
     }
     if (href === '/signup') {
-      window.location.href = '/signup';
+      window.location.href = appHref('/signup');
       return;
     }
-    window.location.href = href;
+    window.location.href = appHref(href);
   };
 
   const filteredTournaments = useMemo(() => {
@@ -73,7 +74,7 @@ function TournamentPage() {
 
   const openTournament = (tournament) => {
     setSelectedId(tournament.id);
-    window.location.href = `/tournaments/${tournament.id}`;
+    window.location.href = appHref(`/tournaments/${tournament.id}`);
   };
 
   if (isDetail && selectedTournament) {

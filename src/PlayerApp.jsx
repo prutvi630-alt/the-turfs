@@ -3,6 +3,7 @@ import { sports, turfs } from './data/homeData';
 import { tournaments } from './data/tournaments';
 import GlobalHeader from './GlobalHeader';
 import ConnectedOwnerDashboard from './OwnerDashboard';
+import { appHref, normalizePath } from './data/routing';
 import {
   calculateAge,
   createId,
@@ -32,7 +33,7 @@ const blankForm = {
 };
 
 const navigate = (href) => {
-  window.location.href = href;
+  window.location.href = appHref(href);
 };
 
 const formatDate = (value) => {
@@ -60,7 +61,7 @@ const compressImage = (file) => new Promise((resolve, reject) => {
 });
 
 function PlayerApp() {
-  const path = window.location.pathname;
+  const path = normalizePath();
   const [state, setState] = useState(getDemoState);
   const [session, setCurrentSession] = useState(getSession);
   const refresh = () => setState(getDemoState());

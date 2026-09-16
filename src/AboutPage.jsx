@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { sports } from './data/homeData';
 import GlobalHeader, { navItems } from './GlobalHeader';
+import { appHref } from './data/routing';
 
 const principles = [
   { icon: '◌', label: 'DISCOVER', text: 'Find sports, venues and opportunities around Vadodara.' },
@@ -66,18 +67,18 @@ function AboutPage() {
       return;
     }
     if (href === '/login') {
-      window.location.href = '/login';
+      window.location.href = appHref('/login');
       return;
     }
     if (href === '/signup') {
-      window.location.href = '/signup';
+      window.location.href = appHref('/signup');
       return;
     }
     if (href === '/tournaments') {
-      window.location.href = href;
+      window.location.href = appHref(href);
       return;
     }
-    window.location.href = href;
+    window.location.href = appHref(href);
   };
 
   return (
