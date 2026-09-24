@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import AdminIcon from './AdminIcon';
+import { route } from '../config/routes';
 import { Toast } from './AdminUI';
 import { changeAdminPassword, getAdminSettings, updateAdminSettings } from '../data/adminSettings';
 
-const navigate = (href) => { window.location.href = href; };
+const navigate = (href) => { window.location.href = route(href); };
 
 export default function SettingsPage({ admin, logout }) {
   const initial = getAdminSettings();

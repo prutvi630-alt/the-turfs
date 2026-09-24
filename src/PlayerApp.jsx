@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { API_URL, apiRequest } from './config/api';
+import { route } from './config/routes';
 import { sports, turfs } from './data/homeData';
 import { tournaments } from './data/tournaments';
 import GlobalHeader from './GlobalHeader';
@@ -112,7 +113,7 @@ const resolvePlayerForSession = (state, session) => {
 };
 
 const navigate = (href) => {
-  window.location.href = href;
+  window.location.href = route(href);
 };
 
 const formatDate = (value) => {

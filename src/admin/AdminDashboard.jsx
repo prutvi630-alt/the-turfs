@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import AdminIcon from './AdminIcon';
+import { route } from '../config/routes';
 import {
   getDashboardSummary,
   getRecentActivities,
@@ -16,7 +17,7 @@ import { ACTIVITY_ICONS, seedActivities } from '../data/activityStore';
 // navigate to the relevant management section, and the activity feed is read
 // from the activity stream (activityStore).
 
-const navigate = (href) => { window.location.href = href; };
+const navigate = (href) => { window.location.href = route(href); };
 
 // Summary cards: title, icon, the selector key that supplies the value, and the
 // admin section the card navigates to. Adding a card here is all it takes.

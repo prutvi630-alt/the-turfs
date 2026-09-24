@@ -1,5 +1,6 @@
 import AdminLayout from './AdminLayout';
 import AdminIcon from './AdminIcon';
+import { route } from '../config/routes';
 import AdminDashboard from './AdminDashboard';
 import PlayersPage from './PlayersPage';
 import TurfOwnersPage from './TurfOwnersPage';
@@ -172,10 +173,10 @@ function AdminPage({ admin, state, logout }) {
             <p>{meta.text}</p>
           </div>
           <div className="admin-page-hero-actions">
-            <button type="button" className="btn btn-secondary admin-action-btn" onClick={() => { window.location.href = '/admin/settings'; }}>
+            <button type="button" className="btn btn-secondary admin-action-btn" onClick={() => { window.location.href = route('/admin/settings'); }}>
               <AdminIcon name="cog" size={16} /> Settings
             </button>
-            <button type="button" className="btn btn-primary admin-action-btn" onClick={() => { window.location.href = '/admin/tournaments?view=create'; }}>
+            <button type="button" className="btn btn-primary admin-action-btn" onClick={() => { window.location.href = route('/admin/tournaments?view=create'); }}>
               <AdminIcon name="trophy" size={16} /> New Tournament
             </button>
           </div>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import AdminIcon from './AdminIcon';
+import { route } from '../config/routes';
 import { Toast } from './AdminUI';
 import { TurfForm } from './TurfsPage';
 import { createTurf, getOwnerOptions } from '../data/adminTurfs';
@@ -11,7 +12,7 @@ import { createTurf, getOwnerOptions } from '../data/adminTurfs';
 // feeds the public getAllTurfs() seam and records an activity, then returns to
 // the turf list with a success toast.
 
-const navigate = (href) => { window.location.href = href; };
+const navigate = (href) => { window.location.href = route(href); };
 
 const blankTurf = {
   name: '',

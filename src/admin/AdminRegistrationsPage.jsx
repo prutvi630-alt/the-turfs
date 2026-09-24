@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import AdminIcon from './AdminIcon';
+import { route } from '../config/routes';
 import { ConfirmDialog, FilterSelect, SearchInput, StatusPill, Toast } from './AdminUI';
 import { getAllTournaments } from '../data/dashboardSelectors';
 import { approveRegistration, getRegistrationRows, rejectRegistration, removeRegistration } from '../data/adminRegistrations';
 
 const formatDate = (value) => value ? new Date(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
-const navigate = (href) => { window.location.href = href; };
+const navigate = (href) => { window.location.href = route(href); };
 
 function RegistrationActions({ row, onAction }) {
   return (

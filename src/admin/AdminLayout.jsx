@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 import { resolveActiveNav, resolvePageMeta } from './adminNav';
+import { route } from '../config/routes';
 
 // AdminLayout is the persistent shell for every protected /admin/* page.
 // Responsibilities:
@@ -52,7 +53,7 @@ function AdminLayout({ children, admin, notificationCount = 0, onLogout, onNavig
   const handleNavigate = (href) => {
     setDrawerOpen(false);
     if (onNavigate) onNavigate(href);
-    else window.location.href = href;
+    else window.location.href = route(href);
   };
 
   const handleToggleSidebar = () => {

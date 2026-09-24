@@ -9,6 +9,7 @@ import BookingPage from './BookingPage';
 import GlobalHeader from './GlobalHeader';
 import Footer from './Footer';
 import PlayersPage from './PlayersPage';
+import { route } from './config/routes';
 
 const formatHeroTitle = (title) => title.split('\n').map((line, index) => <span key={index}>{line}</span>);
 
@@ -212,15 +213,15 @@ function App() {
       }
     } else if (href.startsWith('/')) {
       if (href === '/about') {
-        window.location.href = href;
+        window.location.href = route(href);
         return;
       }
       if (href === '/tournaments') {
-        window.location.href = href;
+        window.location.href = route(href);
         return;
       }
       if (href === '/login' || href === '/signup') {
-        window.location.href = href;
+        window.location.href = route(href);
         return;
       }
       const hashTarget = href === '/upcoming-tournaments' ? '#upcoming-tournaments' : href === '/login' ? '#login' : href === '/signup' ? '#signup' : href;

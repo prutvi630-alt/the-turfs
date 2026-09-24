@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import AdminIcon from './AdminIcon';
+import { route } from '../config/routes';
 import AdminRegistrationsPage from './AdminRegistrationsPage';
 import { StatusPill } from './AdminUI';
 import { getAllTournaments } from '../data/dashboardSelectors';
@@ -7,7 +8,7 @@ import MatchesPage from './MatchesPage';
 import { getTournamentBracket } from '../data/matchStore';
 
 const tabs = ['Overview', 'Registrations', 'Teams', 'Matches', 'Results', 'Bracket', 'Settings'];
-const navigate = (href) => { window.location.href = href; };
+const navigate = (href) => { window.location.href = route(href); };
 
 export default function TournamentDetailPage({ tournamentId }) {
   const [tab, setTab] = useState('Overview');

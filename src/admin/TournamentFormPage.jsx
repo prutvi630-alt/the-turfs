@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import AdminIcon from './AdminIcon';
+import { route } from '../config/routes';
 import { SearchInput, Toast, compressImageFile } from './AdminUI';
 import {
   REGISTRATION_TYPES,
@@ -20,7 +21,7 @@ import { getAdminSettings } from '../data/adminSettings';
 // writes to state.tournaments (draft or published), which the public tournament
 // page reads through the shared merged list.
 
-const navigate = (href) => { window.location.href = href; };
+const navigate = (href) => { window.location.href = route(href); };
 
 const blankForm = {
   name: '',

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AdminIcon from './AdminIcon';
+import { route } from '../config/routes';
 import {
   ConfirmDialog,
   Drawer,
@@ -23,7 +24,7 @@ import { getDemoState } from '../data/demoStore';
 
 const PAGE_SIZE = 8;
 
-const navigate = (href) => { window.location.href = href; };
+const navigate = (href) => { window.location.href = route(href); };
 
 function TeamsPage() {
   const [refreshKey, setRefreshKey] = useState(0);

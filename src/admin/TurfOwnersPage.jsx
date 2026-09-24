@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AdminIcon from './AdminIcon';
+import { route } from '../config/routes';
 import {
   ConfirmDialog,
   Drawer,
@@ -23,7 +24,7 @@ import { getActivities } from '../data/activityStore';
 
 const PAGE_SIZE = 8;
 
-const navigate = (href) => { window.location.href = href; };
+const navigate = (href) => { window.location.href = route(href); };
 
 const SORTS = [
   { value: 'newest', label: 'Newest first' },

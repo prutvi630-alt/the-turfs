@@ -2,6 +2,7 @@ import { useState } from 'react';
 import GlobalHeader from '../GlobalHeader';
 import Footer from '../Footer';
 import AdminIcon from './AdminIcon';
+import { route } from '../config/routes';
 import { authenticateAdmin, dashboardPathForRole, ROLES, setSession } from '../data/demoStore';
 
 // AdminLogin is the dedicated entry point for staff (/admin/login).
@@ -11,7 +12,7 @@ import { authenticateAdmin, dashboardPathForRole, ROLES, setSession } from '../d
 // in the demo store). This mirrors how a real deployment would expose a separate
 // staff sign-in rather than a public role switcher.
 
-const navigate = (href) => { window.location.href = href; };
+const navigate = (href) => { window.location.href = route(href); };
 
 function AdminLogin({ onLogin }) {
   const [email, setEmail] = useState('');
