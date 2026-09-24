@@ -1,28 +1,154 @@
 import { useEffect, useMemo, useState } from 'react';
-import { heroSlides, sports, turfs, tournamentData } from './data/homeData';
+import { sports } from './data/homeData';
+import { getAllTournaments } from './data/dashboardSelectors';
+import { getAllTurfs } from './data/demoStore';
 import AboutPage from './AboutPage';
 import TournamentPage from './TournamentPage';
 import PlayerApp from './PlayerApp';
 import BookingPage from './BookingPage';
 import GlobalHeader from './GlobalHeader';
+import Footer from './Footer';
+import PlayersPage from './PlayersPage';
 
 const formatHeroTitle = (title) => title.split('\n').map((line, index) => <span key={index}>{line}</span>);
 
+const featureItems = [
+  {
+    title: 'Turf Registration',
+    description: <>List your turf or sports complex<br />and reach more players.</>,
+    href: `${import.meta.env.BASE_URL}turf-owner/register`,
+    icon: 'turf',
+  },
+  {
+    title: 'Player Registration',
+    description: <>Register as a player and<br />get tournament updates.</>,
+    href: `${import.meta.env.BASE_URL}player/register`,
+    icon: 'player',
+  },
+  {
+    title: 'Tournaments',
+    description: <>Compete with other turfs<br />and win exciting prizes.</>,
+    href: `${import.meta.env.BASE_URL}tournaments`,
+    icon: 'trophy',
+  },
+  {
+    title: 'Grow Together',
+    description: <>Build your sports community<br />and discover new talent.</>,
+    icon: 'growth',
+  },
+];
+
+const popularSports = ['cricket', 'pickleball', 'football']
+  .map((sportId) => sports.find((sport) => sport.id === sportId))
+  .filter(Boolean);
+
+const turfs = getAllTurfs();
+const tournaments = getAllTournaments();
+const upcomingTournaments = tournaments
+  .filter((tournament) => {
+    const status = String(tournament.status || '').toLowerCase();
+    return new Date(`${tournament.date}T00:00:00`) > new Date()
+      && !['completed', 'cancelled', 'live'].includes(status);
+  })
+  .sort((first, second) => new Date(first.date) - new Date(second.date))
+  .slice(0, 3);
+
+const platformStats = [
+  { value: turfs.length, label: 'TURFS' },
+  { value: sports.length, label: 'SPORTS' },
+  { value: tournaments.length, label: 'TOURNAMENTS' },
+];
+
+const premiumHeroSlides = [
+  {
+    id: 'cricket',
+    eyebrow: 'SPORTS TOURNAMENT PLATFORM',
+    title: 'CLIFT',
+    tag: 'RISE. PLAY. CONQUER.',
+    gameTitle: 'CRICKET',
+    gameSubtitle: 'Compete. Perform. Rise through the rankings.',
+    description: 'Join exciting cricket tournaments, discover competitive turfs and take your game to the next level.',
+    image: 'https://images.unsplash.com/photo-1531415074968-036ba1b575da?auto=format&fit=crop&w=1600&q=80',
+    alt: 'Cricket player in action',
+    focus: 'center right',
+    focusMobile: '60% center',
+    primaryLabel: 'Find a Tournament',
+    primaryHref: `${import.meta.env.BASE_URL}tournaments`,
+    secondaryLabel: 'Register Your Turf',
+    secondaryHref: `${import.meta.env.BASE_URL}turf-owner/register`,
+  },
+  {
+    id: 'football',
+    eyebrow: 'SPORTS TOURNAMENT PLATFORM',
+    title: 'CLIFT',
+    tag: 'RISE. PLAY. CONQUER.',
+    gameTitle: 'FOOTBALL',
+    gameSubtitle: 'Play hard. Compete harder.',
+    description: 'Find competitive football tournaments, connect with players and become part of the growing sports community.',
+    image: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=1600&q=80',
+    alt: 'Football action on a pitch',
+    focus: 'center',
+    focusMobile: 'center',
+    primaryLabel: 'Find a Tournament',
+    primaryHref: `${import.meta.env.BASE_URL}tournaments`,
+    secondaryLabel: 'Register Your Turf',
+    secondaryHref: `${import.meta.env.BASE_URL}turf-owner/register`,
+  },
+  {
+    id: 'pickleball',
+    eyebrow: 'SPORTS TOURNAMENT PLATFORM',
+    title: 'CLIFT',
+    tag: 'RISE. PLAY. CONQUER.',
+    gameTitle: 'PICKLEBALL',
+    gameSubtitle: 'Fast rallies. Real competition.',
+    description: 'Discover pickleball tournaments, meet competitive players and take your game to the next level.',
+    image: 'https://images.unsplash.com/photo-1622279457486-62dcc4a431d6?auto=format&fit=crop&w=1600&q=80',
+    alt: 'Pickleball player hitting a shot',
+    focus: 'center left',
+    focusMobile: '40% center',
+    primaryLabel: 'Find a Tournament',
+    primaryHref: `${import.meta.env.BASE_URL}tournaments`,
+    secondaryLabel: 'Register Your Turf',
+    secondaryHref: `${import.meta.env.BASE_URL}turf-owner/register`,
+  },
+];
+
+function FeatureIcon({ type }) {
+  const paths = {
+    turf: <><path d="M6 20h12" /><path d="M7 20V9l5-4 5 4v11" /><path d="M10 20v-5h4v5" /><path d="M9 11h.01M12 11h.01M15 11h.01" /></>,
+    player: <><circle cx="9" cy="8" r="3" /><circle cx="16" cy="10" r="2.5" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0" /><path d="M14 15.5a4.5 4.5 0 0 1 6.5 4" /></>,
+    trophy: <><path d="M8 5h8v4a4 4 0 0 1-8 0V5Z" /><path d="M8 7H5a3 3 0 0 0 3 3M16 7h3a3 3 0 0 1-3 3M12 13v4M8 20h8M9 17h6" /></>,
+    growth: <><path d="M5 19V9M12 19V5M19 19v-8" /><path d="m4 7 5-3 4 2 6-4" /><path d="M16 2h3v3" /></>,
+  };
+
+  return <svg className="feature-icon-art" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[type]}</svg>;
+}
+
 function App() {
-  if (window.location.pathname === '/about') {
+  const path = window.location.pathname.replace(/^\/Turfview-/, '') || '/';
+
+  if (path === '/about') {
     return <AboutPage />;
   }
 
-  if (window.location.pathname.startsWith('/tournaments')) {
+  if (path.startsWith('/tournaments')) {
     return <TournamentPage />;
   }
 
-  if (window.location.pathname === '/book-your-turf' || window.location.pathname.startsWith('/book-your-turf/')) {
+  if (path === '/book-your-turf' || path.startsWith('/book-your-turf/')) {
     return <BookingPage />;
   }
 
-  if (['/signup', '/login', '/player', '/turf-owner'].some((path) => window.location.pathname.startsWith(path))) {
+  if (path.startsWith('/players')) {
+    return <PlayersPage />;
+  }
+
+  if (['/signup', '/login', '/player', '/turf-owner', '/admin'].some((route) => path.startsWith(route))) {
     return <PlayerApp />;
+  }
+
+  if (path !== '/') {
+    return <NotFoundPage />;
   }
 
   const [activeSlide, setActiveSlide] = useState(0);
@@ -30,7 +156,6 @@ function App() {
   const [search, setSearch] = useState('');
   const [sportFilter, setSportFilter] = useState('All');
   const [areaFilter, setAreaFilter] = useState('All');
-  const [isPaused, setIsPaused] = useState(false);
 
   const areaOptions = useMemo(
     () => ['All', ...new Set(turfs.map((turf) => turf.area).filter(Boolean))],
@@ -38,14 +163,12 @@ function App() {
   );
 
   useEffect(() => {
-    if (isPaused) return undefined;
+    const timer = window.setTimeout(() => {
+      setActiveSlide((prev) => (prev + 1) % premiumHeroSlides.length);
+    }, 4000);
 
-    const timer = setInterval(() => {
-      setActiveSlide((prev) => (prev + 1) % heroSlides.length);
-    }, 5000);
-
-    return () => clearInterval(timer);
-  }, [isPaused]);
+    return () => window.clearTimeout(timer);
+  }, [activeSlide]);
 
   useEffect(() => {
     const elements = document.querySelectorAll('[data-reveal]');
@@ -67,17 +190,14 @@ function App() {
   }, []);
 
   const filteredTurfs = turfs.filter((turf) => {
-    const matchesSearch = turf.name.toLowerCase().includes(search.toLowerCase());
-    const matchesSport = sportFilter === 'All' || turf.sports.includes(sportFilter);
+    const matchesSearch = String(turf.name || '').toLowerCase().includes(search.toLowerCase());
+    const matchesSport = sportFilter === 'All' || (turf.sports || []).includes(sportFilter);
     const matchesArea = areaFilter === 'All' || turf.area === areaFilter;
     return matchesSearch && matchesSport && matchesArea;
   });
 
   const goToSlide = (direction) => {
-    setActiveSlide((prev) => {
-      if (direction === 'next') return (prev + 1) % heroSlides.length;
-      return (prev - 1 + heroSlides.length) % heroSlides.length;
-    });
+    setActiveSlide((prev) => (prev + direction + premiumHeroSlides.length) % premiumHeroSlides.length);
   };
 
   const handleNavClick = (href) => {
@@ -116,8 +236,15 @@ function App() {
   };
 
   const handleJoin = (label) => {
-    const destination = label === 'Register Your Turf' ? '/signup' : label === 'Join as a Player' ? '/signup' : '/login';
-    window.location.href = destination;
+    if (label === 'Register Your Turf') {
+      window.location.href = `${import.meta.env.BASE_URL}turf-owner/register`;
+      return;
+    }
+    if (label === 'Join as a Player' || label === 'Join Now') {
+      window.location.href = `${import.meta.env.BASE_URL}player/register`;
+      return;
+    }
+    window.location.href = `${import.meta.env.BASE_URL}login`;
   };
 
   return (
@@ -126,115 +253,96 @@ function App() {
 
       <main>
         <section className="hero-section">
-          <div className="hero-slider" onMouseEnter={() => setIsPaused(true)} onMouseLeave={() => setIsPaused(false)}>
-            {heroSlides.map((slide, index) => (
-              <div
-                key={slide.label}
+          <div className="hero-slider-track" aria-live="polite">
+            {premiumHeroSlides.map((slide, index) => (
+              <article
+                key={slide.id}
                 className={`hero-slide ${index === activeSlide ? 'active' : ''}`}
-                style={{ backgroundImage: `url(${slide.image})` }}
                 aria-hidden={index !== activeSlide}
               >
-                <div className="hero-overlay" />
-                <div className="container hero-content-wrap">
-                  <div className="hero-copy">
-                    <span className="eyebrow">{slide.label}</span>
-                    <h1>{formatHeroTitle(slide.title)}</h1>
-                    <p>{slide.text}</p>
+                <div
+                  className="hero-slide-media"
+                  role="img"
+                  aria-label={slide.alt}
+                  style={{
+                    backgroundImage: `url('${slide.image}')`,
+                    '--hero-focus': slide.focus || 'center',
+                    '--hero-focus-mobile': slide.focusMobile || slide.focus || 'center',
+                  }}
+                />
+                <div className="hero-slide-overlay" aria-hidden="true" />
+
+                <div className="container hero-slide-inner">
+                  <div className="hero-copy hero-slide-copy">
+                    <span className="eyebrow">{slide.eyebrow}</span>
+                    <h1 className="hero-title">{slide.title}</h1>
+                    <div className="hero-tagline" aria-label="Rise play conquer">
+                      <span>{slide.tag.split(' ')[0]}.</span>
+                      <span className="hero-tagline-accent">{slide.tag.split(' ')[1]}.</span>
+                      <span>{slide.tag.split(' ')[2]}.</span>
+                    </div>
+                    <div className="hero-game-label">{slide.gameTitle}</div>
+                    <p className="hero-game-subtitle">{slide.gameSubtitle}</p>
+                    <p className="hero-description">{slide.description}</p>
                     <div className="hero-actions">
-                      <button type="button" className="btn btn-primary" onClick={() => handleNavClick(slide.primaryTarget)}>
-                        {slide.ctaPrimary}
-                      </button>
-                      <button type="button" className="btn btn-secondary" onClick={() => handleNavClick(slide.secondaryTarget)}>
-                        {slide.ctaSecondary}
-                      </button>
+                      <a className="btn btn-primary" href={slide.primaryHref}>
+                        {slide.primaryLabel} <span aria-hidden="true">→</span>
+                      </a>
+                      <a className="btn btn-secondary" href={slide.secondaryHref}>
+                        {slide.secondaryLabel}
+                      </a>
                     </div>
                   </div>
                 </div>
-              </div>
+              </article>
             ))}
+          </div>
 
-            <div className="hero-controls container">
-              <div className="slider-nav">
-                <button type="button" className="slider-arrow" aria-label="Previous slide" onClick={() => goToSlide('prev')}>
-                  ‹
-                </button>
-                <div className="slide-indicators" aria-label="Slide indicators">
-                  {heroSlides.map((slide, index) => (
-                    <button
-                      key={slide.label}
-                      type="button"
-                      className={`indicator ${index === activeSlide ? 'active' : ''}`}
-                      aria-label={`Go to slide ${index + 1}`}
-                      onClick={() => setActiveSlide(index)}
+          <div className="container hero-slider-footer">
+            <div className="hero-progress-wrap" aria-label="Hero slide progress">
+              {premiumHeroSlides.map((slide, index) => (
+                <button
+                  key={`${slide.id}-indicator`}
+                  type="button"
+                  className={`hero-progress-item ${index === activeSlide ? 'active' : ''}`}
+                  onClick={() => setActiveSlide(index)}
+                  aria-label={`Go to ${slide.gameTitle} slide`}
+                  aria-pressed={index === activeSlide}
+                >
+                  <span className="hero-progress-index">{String(index + 1).padStart(2, '0')} / {String(premiumHeroSlides.length).padStart(2, '0')}</span>
+                  <span className="hero-progress-name">{slide.gameTitle}</span>
+                  <span className="hero-progress-bar">
+                    <span
+                      className={index === activeSlide ? 'hero-progress-fill active' : 'hero-progress-fill'}
+                      style={{ animation: index === activeSlide ? 'heroProgress 4s linear forwards' : 'none' }}
                     />
-                  ))}
-                </div>
-                <button type="button" className="slider-arrow" aria-label="Next slide" onClick={() => goToSlide('next')}>
-                  ›
+                  </span>
                 </button>
-              </div>
+              ))}
+            </div>
 
-              <div className="slider-meta">
-                <span>{String(activeSlide + 1).padStart(2, '0')}</span>
-                <div className="progress-track" aria-hidden="true">
-                  <span style={{ width: `${((activeSlide + 1) / heroSlides.length) * 100}%` }} />
-                </div>
-              </div>
+            <div className="hero-nav-arrows" aria-label="Hero navigation">
+              <button type="button" className="hero-arrow" onClick={() => goToSlide(-1)} aria-label="Previous slide">←</button>
+              <button type="button" className="hero-arrow" onClick={() => goToSlide(1)} aria-label="Next slide">→</button>
             </div>
           </div>
         </section>
 
-        <section id="about" className="intro-section container section-spacing reveal" data-reveal>
-          <div className="intro-visual">
-            <img
-              src="https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=1200&q=80"
-              alt="Sports community in Vadodara"
-            />
-          </div>
-          <div className="intro-content">
-            <span className="section-kicker">VADODARA. YOUR GAME. YOUR COMMUNITY.</span>
-            <h2>The Vadodara Sports Platform is designed to bring players, sports venues and tournaments together in one place.</h2>
-            <p>
-              Discover where to play, find your sport, explore upcoming tournaments and become part of a growing local sports community.
-            </p>
-            <div className="benefits-grid">
-              <article>
-                <span>DISCOVER</span>
-                <p>Find sports and venues around Vadodara.</p>
-              </article>
-              <article>
-                <span>CONNECT</span>
-                <p>Join the sporting community and discover opportunities to play.</p>
-              </article>
-              <article>
-                <span>COMPETE</span>
-                <p>Take part in tournaments and competitive events.</p>
-              </article>
-            </div>
+        <section className="feature-strip" aria-label="Platform features">
+          <div className="container feature-strip-inner">
+            {featureItems.map((feature) => {
+              const content = (
+                <>
+                  <span className={`feature-icon feature-icon-${feature.icon}`}><FeatureIcon type={feature.icon} /></span>
+                  <span className="feature-copy">
+                    <strong>{feature.title}</strong>
+                    <span>{feature.description}</span>
+                  </span>
+                </>
+              );
 
-            <div className="journey-timeline" aria-label="Platform journey timeline">
-              <div className="timeline-step">
-                <span className="timeline-dot" />
-                <div>
-                  <strong>01</strong>
-                  <p>Discover your sport</p>
-                </div>
-              </div>
-              <div className="timeline-step">
-                <span className="timeline-dot" />
-                <div>
-                  <strong>02</strong>
-                  <p>Find the right turf</p>
-                </div>
-              </div>
-              <div className="timeline-step">
-                <span className="timeline-dot" />
-                <div>
-                  <strong>03</strong>
-                  <p>Join the next match</p>
-                </div>
-              </div>
-            </div>
+              return feature.href ? <a className="feature-item" href={feature.href} key={feature.title}>{content}</a> : <div className="feature-item" key={feature.title}>{content}</div>;
+            })}
           </div>
         </section>
 
@@ -242,13 +350,12 @@ function App() {
           <div className="container">
             <div className="section-heading split-heading">
               <div>
-                <span className="section-kicker">PLAY YOUR GAME.</span>
-                <h2>Sports &amp; tournaments organized across Vadodara.</h2>
+                <h2>POPULAR SPORTS</h2>
               </div>
             </div>
 
             <div className="sports-grid">
-              {sports.map((sport) => (
+              {popularSports.map((sport) => (
                 <article key={sport.id} className="sport-card reveal" data-reveal>
                   <div className="sport-image-wrap">
                     <img src={sport.image} alt={sport.name} loading="lazy" />
@@ -325,7 +432,7 @@ function App() {
                   </div>
                   <div className="turf-card-body">
                     <h3>{turf.name}</h3>
-                    <p className="turf-location">📍 {turf.area}, Vadodara</p>
+                    <p className="turf-location">📍 {turf.address || `${turf.area}, Vadodara`}</p>
                     <div className="meta-line">
                       <span>Sports:</span>
                       <strong>{turf.sports.join(' • ')}</strong>
@@ -346,7 +453,7 @@ function App() {
                       <button type="button" className="btn btn-primary" onClick={() => handleJoin('Join Now')}>
                         Join Now
                       </button>
-                      <button type="button" className="btn btn-secondary" onClick={() => handleNavClick('/upcoming-tournaments')}>
+                      <button type="button" className="btn btn-secondary" onClick={() => { window.location.href = `${import.meta.env.BASE_URL}book-your-turf`; }}>
                         View Details
                       </button>
                     </div>
@@ -359,28 +466,32 @@ function App() {
 
         <section id="upcoming-tournaments" className="tournament-preview section-spacing reveal" data-reveal>
           <div className="container">
-            <div className="section-heading">
-              <span className="section-kicker">UPCOMING TOURNAMENTS</span>
-              <h2>Find your next opportunity to compete.</h2>
+            <div className="section-heading tournament-preview-heading">
+              <h2>UPCOMING TOURNAMENTS</h2>
+              <a className="tournament-view-all" href={`${import.meta.env.BASE_URL}tournaments`}>VIEW ALL TOURNAMENTS <span aria-hidden="true">→</span></a>
             </div>
-            <div className="tournament-grid">
-              {tournamentData.map((event) => (
-                <article key={event.name} className="tournament-card reveal" data-reveal>
-                  <span className="tournament-sport">{event.sport}</span>
-                  <h3>{event.name}</h3>
-                  <ul>
-                    <li>{event.date}</li>
-                    <li>{event.venue}</li>
-                    <li>{event.location}</li>
-                    <li>{event.format}</li>
-                    <li>{event.status}</li>
-                  </ul>
-                  <button type="button" className="link-button" onClick={() => handleNavClick(event.href)}>
-                    View Tournament
-                  </button>
+            {upcomingTournaments.length ? <div className="tournament-discovery-grid">
+              {upcomingTournaments.map((tournament, index) => (
+                <article key={tournament.id} className="tournament-discovery-card" style={{ '--card-delay': `${index * 80}ms` }}>
+                  <div className="discovery-card-image">
+                    <img src={tournament.image} alt={`${tournament.sport} tournament`} loading="lazy" />
+                    <span className="sport-chip">{tournament.sport}</span>
+                  </div>
+                  <div className="discovery-card-body">
+                    <h3>{tournament.name}</h3>
+                    <div className="card-meta">
+                      <span>◷ {tournament.dateLabel}</span>
+                      <span>⌖ {tournament.area}, Vadodara</span>
+                      <span>◇ {tournament.format}</span>
+                    </div>
+                    <div className="discovery-card-footer">
+                      <span className="status-badge status-upcoming">UPCOMING</span>
+                      <a className="link-button" href={`${import.meta.env.BASE_URL}tournaments`}>View Tournament</a>
+                    </div>
+                  </div>
                 </article>
               ))}
-            </div>
+            </div> : <div className="tournament-empty home-tournament-empty"><span className="section-kicker">UPCOMING TOURNAMENTS</span><p>No upcoming tournaments at the moment.</p></div>}
           </div>
         </section>
 
@@ -404,17 +515,22 @@ function App() {
 
         <section id="login" className="final-cta section-spacing reveal" data-reveal>
           <div className="container final-cta-box">
-            <div>
+            <div className="final-cta-content">
               <span className="section-kicker">READY TO PLAY?</span>
               <h2>Find your sport. Discover your turf. Join the game.</h2>
+              <p>Become part of Vadodara's growing sports community.</p>
+              <div className="cta-actions">
+                <a className="btn btn-primary" href={`${import.meta.env.BASE_URL}player/register`}>Join as a Player</a>
+                <a className="btn btn-secondary" href={`${import.meta.env.BASE_URL}turf-owner/register`}>Register Your Turf</a>
+              </div>
             </div>
-            <div className="cta-actions">
-              <button type="button" className="btn btn-primary" onClick={() => handleJoin('Join as a Player')}>
-                Join as a Player
-              </button>
-              <button type="button" className="btn btn-secondary" onClick={() => handleJoin('Register Your Turf')}>
-                Register Your Turf
-              </button>
+            <div className="final-cta-stats" aria-label="Platform statistics">
+              {platformStats.map((stat) => (
+                <div className="final-cta-stat" key={stat.label}>
+                  <strong>{stat.value}</strong>
+                  <span>{stat.label}</span>
+                </div>
+              ))}
             </div>
           </div>
         </section>
@@ -422,63 +538,24 @@ function App() {
         <div id="signup" aria-hidden="true" style={{ position: 'absolute', top: 0, left: 0, width: '1px', height: '1px', overflow: 'hidden' }} />
       </main>
 
-      <footer className="site-footer">
-        <div className="container footer-grid">
-          <div className="footer-brand">
-            <h3>SPORTS BELONG TO EVERYONE.</h3>
-            <p>Building a connected sports community for Vadodara — one game, one venue and one tournament at a time.</p>
-            <div className="socials">
-              <a href="https://instagram.com" target="_blank" rel="noreferrer" aria-label="Instagram">Instagram</a>
-              <a href="https://facebook.com" target="_blank" rel="noreferrer" aria-label="Facebook">Facebook</a>
-              <a href="https://linkedin.com" target="_blank" rel="noreferrer" aria-label="LinkedIn">LinkedIn</a>
-              <a href="https://youtube.com" target="_blank" rel="noreferrer" aria-label="YouTube">YouTube</a>
-            </div>
-          </div>
+      <Footer />
+    </div>
+  );
+}
 
-          <div className="footer-column">
-            <h4>PLATFORM</h4>
-            <ul>
-              <li><button type="button" onClick={() => handleNavClick('#top')}>Home</button></li>
-              <li><button type="button" onClick={() => handleNavClick('#about')}>About Us</button></li>
-              <li><button type="button" onClick={() => handleNavClick('/upcoming-tournaments')}>Upcoming Tournaments</button></li>
-            </ul>
-          </div>
-
-          <div className="footer-column">
-            <h4>SPORTS</h4>
-            <ul>
-              {sports.map((sport) => (
-                <li key={sport.id}>{sport.name}</li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="footer-column">
-            <h4>JOIN</h4>
-            <ul>
-              <li><button type="button" onClick={() => handleJoin('Join as a Player')}>Player Signup</button></li>
-              <li><button type="button" onClick={() => handleJoin('Register Your Turf')}>Turf Registration</button></li>
-              <li><button type="button" onClick={() => handleJoin('Login')}>Login</button></li>
-            </ul>
-          </div>
-
-          <div className="footer-column">
-            <h4>SUPPORT</h4>
-            <ul>
-              <li><button type="button" onClick={() => handleNavClick('#top')}>Contact Us</button></li>
-              <li><button type="button" onClick={() => handleNavClick('#top')}>Terms</button></li>
-              <li><button type="button" onClick={() => handleNavClick('#top')}>Privacy</button></li>
-            </ul>
-          </div>
-        </div>
-
-        <div className="footer-bottom">
-          <div className="container footer-bottom-inner">
-            <span>© 2026 Vadodara Sports Platform. All rights reserved.</span>
-            <span>Made for the sports community of Vadodara.</span>
-          </div>
-        </div>
-      </footer>
+function NotFoundPage() {
+  return (
+    <div className="page-shell">
+      <GlobalHeader />
+      <main className="container section-spacing">
+        <section className="turf-directory-empty" style={{ maxWidth: 760, margin: '80px auto 0' }}>
+          <span className="section-kicker">404</span>
+          <h2>PAGE NOT FOUND.</h2>
+          <p>The page you are looking for doesn’t exist or is no longer available.</p>
+          <button type="button" className="btn btn-primary" onClick={() => { window.location.href = `${import.meta.env.BASE_URL}`; }}>Back to Home</button>
+        </section>
+      </main>
+      <Footer />
     </div>
   );
 }

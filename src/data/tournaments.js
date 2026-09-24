@@ -3,7 +3,7 @@ const tournamentImages = {
   Football: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=1600&q=85',
   Pickleball: 'https://images.unsplash.com/photo-1622279457486-62dcc4a431d6?auto=format&fit=crop&w=1600&q=85',
   Tennis: 'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&w=1600&q=85',
-  Badminton: 'https://images.unsplash.com/photo-1626224583764-9f4d3f4d87ec?auto=format&fit=crop&w=1600&q=85',
+  Badminton: 'https://images.unsplash.com/photo-1599474924187-334a4ae5bd3c?auto=format&fit=crop&w=900&q=80',
 };
 
 export const tournaments = [

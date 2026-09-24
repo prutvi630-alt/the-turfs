@@ -1,56 +1,108 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { sports } from './data/homeData';
 import { getAllTurfs, getBookings, getDemoState, getSession, getTurfOwnerId, saveBookings } from './data/demoStore';
-import GlobalHeader, { navItems } from './GlobalHeader';
+import GlobalHeader from './GlobalHeader';
+import Footer from './Footer';
+import scannerImage from './data/scanner.jpeg';
 
 const formatDate = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not selected';
 const overlaps = (fromTime, toTime, slotFrom, slotTo) => fromTime < slotTo && toTime > slotFrom;
+const fallbackTurfImage = sports.find((sport) => sport.id === 'cricket')?.image || '';
+const route = (path) => `${import.meta.env.BASE_URL}${path.replace(/^\//, '')}`;
 
 const normalizeTurf = (turf = {}) => ({
   ...turf,
   id: turf.id,
   name: turf.name || turf.turfName,
-  image: turf.image || turf.images?.[0] || turf.primaryImage || '',
+  image: turf.image || turf.images?.[0] || turf.primaryImage || fallbackTurfImage,
   area: turf.area || turf.turfAddress?.area || turf.location || 'Vadodara',
+  city: turf.city || turf.turfAddress?.city || 'Vadodara',
   sports: Array.isArray(turf.sports) && turf.sports.length ? turf.sports : (Array.isArray(turf.games) ? turf.games : [turf.sport || 'Cricket']),
 });
 
-const getSelectedTurf = () => getAllTurfs().find((turf) => turf.id === window.location.pathname.split('/').filter(Boolean)[1]);
+const getSelectedTurf = () => {
+  const path = window.location.pathname.replace(/^\/Turfview-/, '');
+  const turfId = path.split('/').filter(Boolean)[1];
+  return getAllTurfs().find((turf) => turf.id === turfId) || null;
+};
+
+const isPublicTurf = (turf) => {
+  const status = String(turf.registrationStatus || '').toLowerCase();
+  return !status || ['registered', 'approved', 'published', 'active'].includes(status);
+};
 
 function BookingPage() {
   const allTurfs = getAllTurfs().map(normalizeTurf);
-  const selectedTurf = getSelectedTurf() ? normalizeTurf(getSelectedTurf()) : null;
-  if (selectedTurf) return <TurfBookingFlow turf={selectedTurf} />;
+  const selectedTurf = getSelectedTurf();
+  const [query, setQuery] = useState('');
+  const [sportFilter, setSportFilter] = useState('All Sports');
+  const [areaFilter, setAreaFilter] = useState('All Areas');
+  const vadodaraTurfs = allTurfs.filter((turf) => String(turf.city || '').trim().toLowerCase() === 'vadodara' && isPublicTurf(turf));
+  const sportOptions = useMemo(() => ['All Sports', ...new Set(vadodaraTurfs.flatMap((turf) => turf.sports))], [vadodaraTurfs]);
+  const areaOptions = useMemo(() => ['All Areas', ...new Set(vadodaraTurfs.map((turf) => turf.area).filter(Boolean))], [vadodaraTurfs]);
+  const visibleTurfs = vadodaraTurfs.filter((turf) => {
+    const normalizedQuery = query.trim().toLowerCase();
+    const matchesQuery = !normalizedQuery || [turf.name, turf.area, turf.city, ...(turf.sports || [])].some((value) => String(value || '').toLowerCase().includes(normalizedQuery));
+    const matchesSport = sportFilter === 'All Sports' || turf.sports.includes(sportFilter);
+    const matchesArea = areaFilter === 'All Areas' || turf.area === areaFilter;
+    return matchesQuery && matchesSport && matchesArea;
+  });
+  const resetFilters = () => {
+    setQuery('');
+    setSportFilter('All Sports');
+    setAreaFilter('All Areas');
+  };
+
+  if (selectedTurf) return <TurfBookingFlow turf={normalizeTurf(selectedTurf)} />;
 
   return (
     <div className="page-shell booking-page">
       <GlobalHeader />
-      <main className="container section-spacing">
-        <div className="section-heading">
-          <span className="section-kicker">BOOK YOUR TURF</span>
-          <h1>FIND THE RIGHT PLACE FOR YOUR NEXT GAME.</h1>
-          <p>Explore sports venues across Vadodara and join the platform to book your preferred turf.</p>
-        </div>
-        <div className="turfs-grid">
-          {allTurfs.map((turf) => (
-            <article key={turf.id} className="turf-card" onClick={() => { window.location.href = `/book-your-turf/${turf.id}`; }}>
-              <div className="turf-image-wrap">
-                <img src={turf.image} alt={turf.name} loading="lazy" />
-                <span className="area-badge">{turf.area || turf.location || 'Vadodara'}</span>
-              </div>
-              <div className="turf-card-body">
-                <h2>{turf.name}</h2>
-                <p className="turf-location">{turf.area || turf.location || 'Vadodara'}, Vadodara</p>
-                <div className="meta-line"><span>Sports:</span><strong>{(turf.sports || []).join(' • ')}</strong></div>
-                <button type="button" className="btn btn-primary" onClick={(event) => { event.stopPropagation(); window.location.href = `/book-your-turf/${turf.id}`; }}>Book This Turf</button>
-              </div>
-            </article>
-          ))}
-        </div>
+      <main>
+        <section className="turf-directory-hero">
+          <div className="container turf-directory-hero-content">
+            <span className="eyebrow">FIND YOUR TURF</span>
+            <h1>PLAY AT THE BEST TURFS IN VADODARA.</h1>
+            <p>Discover sports turfs, compare venues and find the right place for your next game.</p>
+          </div>
+        </section>
+
+        <section className="turf-directory container section-spacing">
+          <div className="turf-directory-heading">
+            <div>
+              <span className="section-kicker">VADODARA SPORTS VENUES</span>
+              <h2>{visibleTurfs.length} TURFS IN VADODARA</h2>
+            </div>
+            <span className="turf-directory-result">{visibleTurfs.length ? 'READY TO BOOK' : 'NO RESULTS'}</span>
+          </div>
+
+          <div className="turf-directory-filters">
+            <label className="turf-directory-search"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search turfs, areas or sports..." aria-label="Search turfs, areas or sports" /></label>
+            <label><span>Sport</span><select value={sportFilter} onChange={(event) => setSportFilter(event.target.value)}>{sportOptions.map((option) => <option key={option}>{option}</option>)}</select></label>
+            <label><span>Area</span><select value={areaFilter} onChange={(event) => setAreaFilter(event.target.value)}>{areaOptions.map((option) => <option key={option}>{option}</option>)}</select></label>
+            {(query || sportFilter !== 'All Sports' || areaFilter !== 'All Areas') && <button type="button" className="turf-directory-reset" onClick={resetFilters}>Reset</button>}
+          </div>
+
+          {visibleTurfs.length ? <div className="turfs-grid turf-directory-grid">
+            {visibleTurfs.map((turf) => <TurfDirectoryCard key={turf.id} turf={turf} />)}
+          </div> : <div className="turf-directory-empty"><span className="section-kicker">NO TURFS FOUND</span><h2>NO TURFS AVAILABLE YET.</h2><p>Try another search or area, or register your venue with CLIFT.</p><button type="button" className="btn btn-primary" onClick={() => { window.location.href = route('/turf-owner/register'); }}>Register Your Turf</button></div>}
+        </section>
+
+        <section className="turf-owner-cta">
+          <div className="container turf-owner-cta-inner"><div><span className="section-kicker">FOR TURF OWNERS</span><h2>OWN A TURF?</h2><p>List your sports venue on CLIFT and connect with players.</p></div><a className="btn btn-primary" href={route('/turf-owner/register')}>Register Your Turf</a></div>
+        </section>
       </main>
-      <BookingFooter />
+      <Footer />
     </div>
   );
+}
+
+function TurfDirectoryCard({ turf }) {
+  const bookingRoute = route(`/book-your-turf/${turf.id}`);
+  return <article className="turf-directory-card">
+    <div className="turf-image-wrap"><img src={turf.image} alt={`${turf.name} sports turf`} loading="lazy" /><span className="area-badge">{turf.area}</span><div className="sport-badges">{turf.sports.map((sport) => <span key={sport}>{sport}</span>)}</div></div>
+    <div className="turf-card-body"><h2>{turf.name}</h2><p className="turf-location">{turf.address || `${turf.area}, ${turf.city}`}</p><div className="meta-line"><span>Area Zone:</span><strong>{turf.area}</strong></div><div className="meta-line"><span>Sports:</span><strong>{turf.sports.join(' • ')}</strong></div>{turf.facilities?.length ? <div className="meta-line"><span>Facilities:</span><strong>{turf.facilities.join(' • ')}</strong></div> : null}{turf.openingHours ? <div className="meta-line"><span>Opening:</span><strong>{turf.openingHours}</strong></div> : null}{turf.price ? <div className="meta-line price-row"><span>Starting price:</span><strong>{turf.price}</strong></div> : null}<a className="btn btn-primary turf-directory-book" href={bookingRoute}>Book This Turf</a></div>
+  </article>;
 }
 
 function TurfBookingFlow({ turf }) {
@@ -101,13 +153,7 @@ function TurfBookingFlow({ turf }) {
     {stage === 'form' && <BookingForm turf={turf} sports={sports} booking={booking} errors={errors} paymentMethod={paymentMethod} unavailableSlots={unavailableSlots} update={update} setPaymentMethod={setPaymentMethod} onSubmit={submit} />}
     {stage === 'payment' && <PaymentScreen turf={turf} booking={booking} onConfirm={() => confirmBooking('Paid - demo payment')} onBack={() => setStage('form')} />}
     {stage === 'success' && <BookingSuccess turf={turf} booking={booking} />}
-  </main><BookingFooter /></div>;
-}
-
-function BookingFooter() {
-  const navigate = (href) => { window.location.href = href; };
-
-  return <footer className="site-footer"><div className="container footer-grid"><div className="footer-brand"><h3>SPORTS BELONG TO EVERYONE.</h3><p>Building a connected sports community for Vadodara — one game, one venue and one tournament at a time.</p><div className="socials"><a href="https://instagram.com" target="_blank" rel="noreferrer">Instagram</a><a href="https://facebook.com" target="_blank" rel="noreferrer">Facebook</a><a href="https://linkedin.com" target="_blank" rel="noreferrer">LinkedIn</a><a href="https://youtube.com" target="_blank" rel="noreferrer">YouTube</a></div></div><div className="footer-column"><h4>PLATFORM</h4><ul>{navItems.map((item) => <li key={item.label}><button type="button" onClick={() => navigate(item.href)}>{item.label}</button></li>)}</ul></div><div className="footer-column"><h4>SPORTS</h4><ul>{sports.map((sport) => <li key={sport.id}>{sport.name}</li>)}</ul></div><div className="footer-column"><h4>JOIN</h4><ul><li><button type="button" onClick={() => navigate('/login')}>Login</button></li><li><button type="button" onClick={() => navigate('/signup')}>Sign Up</button></li><li><button type="button" onClick={() => navigate('/signup')}>Register Your Turf</button></li></ul></div><div className="footer-column"><h4>ABOUT</h4><ul><li><button type="button" onClick={() => navigate('/about')}>Our Story</button></li><li><button type="button" onClick={() => navigate('/tournaments')}>Tournaments</button></li></ul></div></div><div className="footer-bottom"><div className="container footer-bottom-inner"><span>© 2026 Vadodara Sports Platform. All rights reserved.</span><span>Made for the sports community of Vadodara.</span></div></div></footer>;
+  </main><Footer /></div>;
 }
 
 function BookingForm({ turf, sports, booking, errors, paymentMethod, unavailableSlots, update, setPaymentMethod, onSubmit }) {
@@ -122,7 +168,7 @@ function BookingField({ label, value, onChange, error, ...props }) { return <lab
 function BookingSelect({ label, value, onChange, options, error }) { return <label className="form-field"><span>{label} <b>*</b></span><select value={value} onChange={(event) => onChange(event.target.value)}><option value="">Select a game</option>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select>{error && <small className="inline-error">{error}</small>}</label>; }
 function BookingSummary({ turf, booking, paymentMethod }) { return <section className="booking-summary"><div className="form-section-title"><span>SUMMARY</span><h2>Your booking</h2></div><div className="summary-list"><SummaryItem label="Turf Name" value={turf.name} /><SummaryItem label="Selected Game" value={booking.game || 'Not selected'} /><SummaryItem label="Booking Date" value={formatDate(booking.date)} /><SummaryItem label="Time" value={`${booking.fromTime || '--:--'} to ${booking.toTime || '--:--'}`} /><SummaryItem label="User Name" value={booking.name || 'Not entered'} /><SummaryItem label="Mobile" value={booking.mobile || 'Not entered'} /><SummaryItem label="Email" value={booking.email || 'Not entered'} /><SummaryItem label="Total" value={turf.price} /><SummaryItem label="Payment" value={paymentMethod ? (paymentMethod === 'online' ? 'Online Payment' : 'Cash Payment') : 'Not selected'} /></div></section>; }
 function SummaryItem({ label, value }) { return <div><span>{label}</span><strong>{value}</strong></div>; }
-function PaymentScreen({ turf, booking, onConfirm, onBack }) { return <div className="flow-panel payment-screen"><span className="section-kicker">DEMO PAYMENT</span><h1>COMPLETE YOUR PAYMENT.</h1><p>Scan the code or use your preferred payment app to pay for this booking.</p><div className="payment-screen-grid"><div className="qr-code" aria-label="Demo payment QR code" /><div className="payment-details"><SummaryItem label="Amount" value={turf.price} /><SummaryItem label="Turf" value={turf.name} /><SummaryItem label="Game" value={booking.game} /><SummaryItem label="Date & time" value={`${formatDate(booking.date)} · ${booking.fromTime} to ${booking.toTime}`} /></div></div><div className="flow-actions"><button type="button" className="btn btn-secondary" onClick={onBack}>Back to booking</button><button type="button" className="btn btn-primary" onClick={onConfirm}>I have completed payment</button></div></div>; }
+function PaymentScreen({ turf, booking, onConfirm, onBack }) { return <div className="flow-panel payment-screen"><span className="section-kicker">DEMO PAYMENT</span><h1>COMPLETE YOUR PAYMENT.</h1><p>Scan the code or use your preferred payment app to pay for this booking.</p><div className="payment-screen-grid"><div className="qr-code" aria-label="Demo payment QR code" style={{ backgroundImage: `url(${scannerImage})`, backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }} /><div className="payment-details"><SummaryItem label="Amount" value={turf.price} /><SummaryItem label="Turf" value={turf.name} /><SummaryItem label="Game" value={booking.game} /><SummaryItem label="Date & time" value={`${formatDate(booking.date)} · ${booking.fromTime} to ${booking.toTime}`} /></div></div><div className="flow-actions"><button type="button" className="btn btn-secondary" onClick={onBack}>Back to booking</button><button type="button" className="btn btn-primary" onClick={onConfirm}>I have completed payment</button></div></div>; }
 function BookingSuccess({ turf, booking }) { const isOnline = booking.paymentMethod === 'Online'; return <div className="flow-panel success-panel"><span className="success-mark">✓</span><span className="section-kicker">BOOKING CONFIRMED</span><h1>BOOKING SUCCESSFULLY DONE</h1><p className="success-note">{isOnline ? 'Please show your payment proof or payment screenshot when you arrive at the turf.' : 'Please complete the payment first when you arrive at the turf.'}</p><div className="confirmation-details"><SummaryItem label="Turf Name" value={turf.name} /><SummaryItem label="Game" value={booking.game} /><SummaryItem label="Date" value={formatDate(booking.bookingDate)} /><SummaryItem label="From Time" value={booking.fromTime} /><SummaryItem label="To Time" value={booking.toTime} /><SummaryItem label="Payment Method" value={booking.paymentMethod} /><SummaryItem label="Booking Status" value={booking.bookingStatus} /></div><button type="button" className="btn btn-primary" onClick={() => { window.location.href = '/book-your-turf'; }}>Book another turf</button></div>; }
 
 export default BookingPage;

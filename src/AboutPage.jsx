@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import { sports } from './data/homeData';
-import GlobalHeader, { navItems } from './GlobalHeader';
+import GlobalHeader from './GlobalHeader';
+import Footer from './Footer';
+
+const baseUrl = import.meta.env.BASE_URL;
+const route = (path) => `${baseUrl}${path.replace(/^\//, '')}`;
 
 const principles = [
   { icon: '◌', label: 'DISCOVER', text: 'Find sports, venues and opportunities around Vadodara.' },
@@ -9,9 +13,9 @@ const principles = [
 ];
 
 const ecosystem = [
-  { icon: '◉', label: 'PLAYER', items: ['Discover sports', 'Find venues', 'Join opportunities'] },
-  { icon: '⌂', label: 'SPORTS VENUE', items: ['Showcase venue', 'Connect with players', 'Host sporting activity'] },
-  { icon: '◇', label: 'TOURNAMENT', items: ['Create competition', 'Bring teams together', 'Give players an opportunity to compete'] },
+  { icon: '◉', label: 'PLAYER', href: route('/players'), items: ['Discover sports', 'Find venues', 'Join opportunities'] },
+  { icon: '⌂', label: 'TURF', href: route('/book-your-turf'), items: ['Showcase venue', 'Connect with players', 'Host sporting activity'] },
+  { icon: '◇', label: 'TOURNAMENT', href: route('/tournaments'), items: ['Create competition', 'Bring teams together', 'Give players an opportunity to compete'] },
 ];
 
 const journey = [
@@ -66,18 +70,18 @@ function AboutPage() {
       return;
     }
     if (href === '/login') {
-      window.location.href = '/login';
+      window.location.href = route('/login');
       return;
     }
     if (href === '/signup') {
-      window.location.href = '/signup';
+      window.location.href = route('/signup');
       return;
     }
-    if (href === '/tournaments') {
-      window.location.href = href;
+    if (href === '/tournaments' || href === '/players' || href === '/book-your-turf' || href === '/turf-owner/register' || href === '/player/register') {
+      window.location.href = route(href === '/book-your-turf' ? '/book-your-turf' : href);
       return;
     }
-    window.location.href = href;
+    window.location.href = route(href);
   };
 
   return (
@@ -88,26 +92,26 @@ function AboutPage() {
         <section className="about-hero">
           <div className="about-hero-backdrop" />
           <div className="container about-hero-content about-reveal" data-about-reveal>
-            <span className="eyebrow">ABOUT THE PLATFORM</span>
-            <h1>MORE THAN A GAME.</h1>
-            <p>We're building a connected sports ecosystem for Vadodara — bringing players, venues and tournaments closer together.</p>
+            <span className="eyebrow">ABOUT CLIFT</span>
+            <h1>MORE THAN JUST A GAME.</h1>
+            <p>CLIFT brings players, turfs and tournaments together in one connected sports platform for Vadodara.</p>
             <strong>Discover. Connect. Compete.</strong>
             <div className="hero-actions">
-              <button type="button" className="btn btn-primary" onClick={() => navigate('/tournaments')}>Explore Upcoming Tournaments</button>
-              <button type="button" className="btn btn-secondary" onClick={() => navigate('/#sports')}>Explore Sports</button>
+              <button type="button" className="btn btn-primary" onClick={() => navigate('/tournaments')}>Explore Tournaments</button>
+              <button type="button" className="btn btn-secondary" onClick={() => navigate('/book-your-turf')}>Explore Turfs</button>
             </div>
           </div>
         </section>
 
         <section className="about-editorial section-spacing container about-reveal" data-about-reveal>
           <div className="about-image-frame image-reveal">
-            <img src="https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=1200&q=85" alt="Players sharing a moment on a sports field" />
+            <img src="https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=1200&q=85" alt="Players sharing a moment on a sports field" />
           </div>
           <div className="about-editorial-copy">
-            <span className="section-kicker">WHY WE BUILT THIS</span>
+            <span className="section-kicker">WHAT IS CLIFT?</span>
             <h2>SPORTS SHOULD BE EASIER TO DISCOVER.</h2>
-            <p>Finding a place to play, discovering tournaments and becoming part of a sporting community can often feel scattered across different platforms and channels.</p>
-            <p>The Vadodara Sports Platform is designed to bring these experiences closer together — giving players a simpler way to discover sports opportunities around their city.</p>
+            <p>CLIFT is a sports platform built to connect the people and places that make local sport happen. It brings together players, venue owners and tournament communities in one place.</p>
+            <p>Instead of treating discovery, booking and competition as separate experiences, the platform connects them into one clear sports journey for Vadodara.</p>
             <div className="principles-row">
               {principles.map((principle) => (
                 <article className="principle-item" key={principle.label}>
@@ -123,26 +127,26 @@ function AboutPage() {
         <section className="idea-section section-spacing about-reveal" data-about-reveal>
           <div className="idea-backdrop" />
           <div className="container idea-content">
-            <span className="section-kicker">THE IDEA</span>
+            <span className="section-kicker">THE PROBLEM</span>
             <h2>ONE CITY.<br /><em>ONE SPORTS COMMUNITY.</em></h2>
-            <p>Vadodara has players who want to play, venues that provide places to play, and tournaments that create opportunities to compete.</p>
-            <p>The idea is simple: bring these parts of the sporting ecosystem together through one connected platform.</p>
+            <p>Players often struggle to discover the right turf, tournament or opportunity at the right time. Turf owners need better visibility, and communities are fragmented across disconnected channels.</p>
+            <p>CLIFT exists to make local sports easier to discover, easier to join and easier to build around.</p>
           </div>
         </section>
 
         <section className="ecosystem-section section-spacing container about-reveal" data-about-reveal>
           <div className="section-heading centered-heading">
-            <span className="section-kicker">THE SPORTS ECOSYSTEM</span>
+            <span className="section-kicker">THE CLIFT ECOSYSTEM</span>
             <h2>EVERY PART OF THE GAME,<br />CLOSER TOGETHER.</h2>
           </div>
           <div className="ecosystem-visual">
             <div className="ecosystem-orbit orbit-one" /><div className="ecosystem-orbit orbit-two" />
             {ecosystem.map((node) => (
-              <article className={`ecosystem-node ecosystem-${node.label.toLowerCase().replace(' ', '-')}`} key={node.label}>
+              <a href={node.href} className={`ecosystem-node ecosystem-${node.label.toLowerCase().replace(' ', '-')}`} key={node.label} onClick={(event) => { if (node.href.startsWith('http')) return; event.preventDefault(); window.location.href = node.href; }}>
                 <span className="ecosystem-icon" aria-hidden="true">{node.icon}</span>
                 <strong>{node.label}</strong>
                 <ul>{node.items.map((item) => <li key={item}>{item}</li>)}</ul>
-              </article>
+              </a>
             ))}
             <div className="ecosystem-core"><span>VS</span><strong>SPORTS<br />PLATFORM</strong></div>
             <div className="ecosystem-community">COMMUNITY</div>
@@ -152,7 +156,7 @@ function AboutPage() {
         <section className="journey-section section-spacing about-reveal" data-about-reveal>
           <div className="container">
             <div className="section-heading journey-heading">
-              <span className="section-kicker">HOW IT COMES TOGETHER</span>
+              <span className="section-kicker">HOW CLIFT CONNECTS EVERYONE</span>
               <h2>FROM DISCOVERY<br />TO COMPETITION.</h2>
             </div>
             <div className="journey-progress"><span style={{ height: `${((activeJourney + 1) / journey.length) * 100}%` }} /></div>
@@ -186,38 +190,38 @@ function AboutPage() {
         <section className="vadodara-section section-spacing about-reveal" data-about-reveal>
           <div className="vadodara-backdrop" />
           <div className="container vadodara-content">
-            <span className="section-kicker">STARTING WITH VADODARA</span>
-            <h2>BUILT AROUND<br /><em>THE CITY WE CALL HOME.</em></h2>
-            <p>The platform begins with Vadodara — connecting the city's players, sports venues and sporting opportunities into one focused ecosystem.</p>
-            <span className="city-stamp">VADODARA / 22.30° N, 73.19° E</span>
+            <span className="section-kicker">MISSION</span>
+            <h2>TO MAKE LOCAL SPORTS<br /><em>EASIER TO DISCOVER.</em></h2>
+            <p>CLIFT’s mission is to make local sports easier to discover, easier to participate in and more connected for everyone.</p>
+            <span className="city-stamp">VADODARA SPORTS COMMUNITY</span>
           </div>
         </section>
 
         <section className="values-section section-spacing container about-reveal" data-about-reveal>
-          <div className="section-heading"><span className="section-kicker">WHAT WE STAND FOR</span><h2>THE PRINCIPLES<br />BEHIND THE PLATFORM.</h2></div>
+          <div className="section-heading"><span className="section-kicker">VISION</span><h2>BUILDING A SPORTS ECOSYSTEM<br />WHERE EVERYONE CAN GROW.</h2></div>
           <div className="values-grid">{values.map(([label, text], index) => <article className="value-card" key={label}><span>0{index + 1}</span><h3>{label}</h3><p>{text}</p></article>)}</div>
         </section>
 
         <section className="brand-statement section-spacing about-reveal" data-about-reveal>
-          <div className="container brand-statement-inner"><span className="section-kicker">THE REASON WE KEEP BUILDING</span><h2>WE DON'T JUST WANT PEOPLE TO PLAY.<br /><em>WE WANT THEM TO KEEP PLAYING.</em></h2><p>Because every game creates a connection, every tournament creates an opportunity, and every player has a chance to grow.</p></div>
+          <div className="container brand-statement-inner"><span className="section-kicker">WHY CLIFT</span><h2>DISCOVER.<br /><em>CONNECT.</em><br />COMPETE.<br />GROW.</h2><p>Because playing together creates better communities, stronger opportunities and a richer local sports culture.</p></div>
         </section>
 
         <section className="about-final-cta section-spacing about-reveal" data-about-reveal>
           <div className="about-final-backdrop" />
-          <div className="container about-final-content"><span className="section-kicker">VADODARA SPORTS PLATFORM</span><h2>READY TO PLAY?</h2><p>Find your sport. Discover your venue. Join the game.</p><div className="cta-actions"><button type="button" className="btn btn-primary" onClick={() => navigate('/signup')}>Join the Platform</button><button type="button" className="btn btn-secondary" onClick={() => navigate('/tournaments')}>Upcoming Tournaments</button></div></div>
+          <div className="container about-final-content">
+            <span className="section-kicker">READY TO BE PART OF THE GAME?</span>
+            <h2>JOIN THE PLATFORM.</h2>
+            <p>Whether you play, host or compete, CLIFT gives you a place to get started.</p>
+            <div className="cta-actions">
+              <button type="button" className="btn btn-primary" onClick={() => navigate('/tournaments')}>Explore Tournaments</button>
+              <button type="button" className="btn btn-secondary" onClick={() => navigate('/turf-owner/register')}>Register Your Turf</button>
+              <button type="button" className="btn btn-secondary" onClick={() => navigate('/player/register')}>Register as a Player</button>
+            </div>
+          </div>
         </section>
       </main>
 
-      <footer className="site-footer">
-        <div className="container footer-grid">
-          <div className="footer-brand"><h3>SPORTS BELONG TO EVERYONE.</h3><p>Building a connected sports community for Vadodara — one game, one venue and one tournament at a time.</p><div className="socials"><a href="https://instagram.com" target="_blank" rel="noreferrer">Instagram</a><a href="https://facebook.com" target="_blank" rel="noreferrer">Facebook</a><a href="https://linkedin.com" target="_blank" rel="noreferrer">LinkedIn</a><a href="https://youtube.com" target="_blank" rel="noreferrer">YouTube</a></div></div>
-          <div className="footer-column"><h4>PLATFORM</h4><ul>{navItems.map((item) => <li key={item.label}><button type="button" onClick={() => navigate(item.href)}>{item.label}</button></li>)}</ul></div>
-          <div className="footer-column"><h4>SPORTS</h4><ul>{sports.map((sport) => <li key={sport.id}>{sport.name}</li>)}</ul></div>
-          <div className="footer-column"><h4>JOIN</h4><ul><li><button type="button" onClick={() => navigate('/login')}>Login</button></li><li><button type="button" onClick={() => navigate('/signup')}>Sign Up</button></li><li><button type="button" onClick={() => navigate('/signup')}>Register Your Turf</button></li></ul></div>
-          <div className="footer-column"><h4>ABOUT</h4><ul><li><button type="button" onClick={() => navigate('/about')}>Our Story</button></li><li><button type="button" onClick={() => navigate('/#sports')}>Explore Sports</button></li><li><button type="button" onClick={() => navigate('/tournaments')}>Tournaments</button></li></ul></div>
-        </div>
-        <div className="footer-bottom"><div className="container footer-bottom-inner"><span>© 2026 Vadodara Sports Platform. All rights reserved.</span><span>Made for the sports community of Vadodara.</span></div></div>
-      </footer>
+      <Footer />
     </div>
   );
 }

@@ -7,7 +7,7 @@ import {
   saveBookings,
   saveDemoState,
 } from './data/demoStore';
-
+import { ACTIVITY_TYPES, recordActivity } from './data/activityStore';
 const sections = ['Overview', 'My Turf', 'Bookings', 'Players', 'Player Requests', 'Teams', 'Availability'];
 const formatDate = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not selected';
 const fullName = (player) => `${player?.firstName || ''} ${player?.surname || ''}`.trim() || 'Player';
@@ -68,7 +68,7 @@ function Bookings({ state, owner, turf, refresh }) {
 
 function PlayerRequests({ state, owner, turf, refresh }) {
   const requests = state.requests.filter((item) => item.ownerId === owner.id && item.turfId === turf.id);
-  const respond = (id, status) => { const next = getDemoState(); const request = next.requests.find((item) => item.id === id && item.ownerId === owner.id && item.turfId === turf.id); if (!request) return; request.status = status; request.respondedAt = new Date().toISOString(); saveDemoState(next); refresh(); };
+  const respond = (id, status) => { const next = getDemoState(); const request = next.requests.find((item) => item.id === id && item.ownerId === owner.id && item.turfId === turf.id); if (!request) return; request.status = status; request.respondedAt = new Date().toISOString(); recordActivity({ state: next, type: status === 'accepted' ? ACTIVITY_TYPES.REGISTRATION_APPROVED : ACTIVITY_TYPES.REGISTRATION_REJECTED, actorRole: 'turf-owner', actorName: owner.name, message: `Registration ${status} for ${request.sportId || 'sport'}`, targetPath: '/admin/registrations', meta: { requestId: request.id } }); saveDemoState(next); refresh(); };
   return <section className="dashboard-block"><SectionHeading kicker="PLAYER REQUESTS" title="WHO WANTS TO PLAY HERE." />{requests.length ? <div className="owner-record-list">{requests.map((request) => { const player = state.players.find((item) => item.id === request.playerId); return <article className="owner-record" key={request.id}><div className="owner-player-record"><span className="large-avatar">{fullName(player).slice(0, 2).toUpperCase()}</span><div><h3>{fullName(player)}</h3><p>{player?.age} years · {request.sportId} · {player?.mobile}</p><p>{player?.email} · {player?.house}, {player?.street}, {player?.city}</p><small>Requested {formatDate(request.createdAt?.slice(0, 10))}</small></div></div><div className="owner-record-actions"><StatusPill status={request.status} />{request.status === 'pending' && <><button type="button" className="btn btn-primary" onClick={() => respond(request.id, 'accepted')}>Accept</button><button type="button" className="btn btn-secondary" onClick={() => respond(request.id, 'rejected')}>Reject</button></>}</div></article>; })}</div> : <EmptyState title="No player requests yet" text="Requests for this turf stay private to this owner." />}</section>;
 }
 
