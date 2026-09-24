@@ -31,7 +31,7 @@ function GlobalHeader() {
     window.location.href = `${import.meta.env.BASE_URL}${href.replace(/^\//, '')}`;
   };
 
-  const currentPath = window.location.pathname.replace(/^\/Turfview-/, '') || '/';
+  const currentPath = window.location.pathname.replace(/^\/The-Turf-/, '') || '/';
 
   const isCurrent = (href) => (
     href === '/'

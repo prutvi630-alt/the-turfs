@@ -46,7 +46,7 @@ const sectionMeta = {
 };
 
 function AdminPage({ admin, state, logout }) {
-  const path = window.location.pathname.replace(/^\/Turfview-/, '') || '/';
+  const path = window.location.pathname.replace(/^\/The-Turf-/, '') || '/';
   const clean = splitAdminPath(path);
   // Any deeper path (e.g. /admin/tournaments/123) maps to its parent section.
   const base = clean === '/admin' ? '/admin/dashboard' : clean;

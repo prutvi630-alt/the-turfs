@@ -34,7 +34,7 @@ function TournamentPage() {
   // admin publishes appear here without any duplicated hardcoded data.
   const tournaments = getAllTournaments();
 
-  const path = window.location.pathname.replace(/^\/Turfview-/, '') || '/';
+  const path = window.location.pathname.replace(/^\/The-Turf-/, '') || '/';
   const isDetail = path.startsWith('/tournaments/');
   const routeId = path.split('/').filter(Boolean)[1];
   const selectedTournament = tournaments.find((tournament) => tournament.id === (selectedId || routeId)) || null;

@@ -125,7 +125,7 @@ function FeatureIcon({ type }) {
 }
 
 function App() {
-  const path = window.location.pathname.replace(/^\/Turfview-/, '') || '/';
+  const path = window.location.pathname.replace(/^\/The-Turf-/, '') || '/';
 
   if (path === '/about') {
     return <AboutPage />;

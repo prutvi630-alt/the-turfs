@@ -21,7 +21,7 @@ const normalizeTurf = (turf = {}) => ({
 });
 
 const getSelectedTurf = () => {
-  const path = window.location.pathname.replace(/^\/Turfview-/, '');
+  const path = window.location.pathname.replace(/^\/The-Turf-/, '');
   const turfId = path.split('/').filter(Boolean)[1];
   return getAllTurfs().find((turf) => turf.id === turfId) || null;
 };

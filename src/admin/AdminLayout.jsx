@@ -20,7 +20,7 @@ function AdminLayout({ children, admin, notificationCount = 0, onLogout, onNavig
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const currentPath = window.location.pathname.replace(/^\/Turfview-/, '') || '/';
+  const currentPath = window.location.pathname.replace(/^\/The-Turf-/, '') || '/';
   const currentSearch = window.location.search || '';
   const activeId = resolveActiveNav(currentPath, currentSearch);
   const meta = resolvePageMeta(currentPath, currentSearch);

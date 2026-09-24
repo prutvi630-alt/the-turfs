@@ -140,7 +140,7 @@ const compressImage = (file) => new Promise((resolve, reject) => {
 });
 
 function PlayerApp() {
-  const path = window.location.pathname.replace(/^\/Turfview-/, '') || '/';
+  const path = window.location.pathname.replace(/^\/The-Turf-/, '') || '/';
   const [state, setState] = useState(getDemoState);
   const [session, setCurrentSession] = useState(() => {
     const storedSession = getSession();
