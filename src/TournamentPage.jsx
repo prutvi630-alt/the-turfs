@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { sports } from './data/homeData';
-import { getAllTurfs } from './data/demoStore';
+import { getAllTurfs, getDemoState, getSession } from './data/demoStore';
 import { getAllTournaments } from './data/dashboardSelectors';
 import GlobalHeader from './GlobalHeader';
 import Footer from './Footer';
 import { getTournamentBracket, getTournamentMatches } from './data/matchStore';
+import { calculateTournamentFee, createTournamentRegistration } from './data/adminRegistrations';
+import scannerImage from './data/scanner.jpeg';
+import { normalizePath } from './config/routes';
 
 const filterOptions = {
   sports: ['All Sports', ...sports.map((sport) => sport.name)],
@@ -14,6 +17,12 @@ const filterOptions = {
 
 const getVenue = (tournament) => getAllTurfs().find((turf) => turf.id === tournament.venueId) || null;
 const getStartTime = (tournament) => new Date(`${tournament.date}T00:00:00`);
+const getLoggedInPlayer = () => {
+  const session = getSession();
+  if (!session || session.role !== 'player') return null;
+  const state = getDemoState();
+  return (state.players || []).find((player) => player.id === session.userId || String(player.email || '').toLowerCase() === String(session.email || '').toLowerCase()) || null;
+};
 // A tournament is public when it is published/visible AND upcoming. Admin
 // drafts and cancelled/completed events are excluded, matching prior behaviour.
 const isUpcoming = (tournament) => {
@@ -21,7 +30,7 @@ const isUpcoming = (tournament) => {
   if (['draft', 'unpublished', 'cancelled', 'canceled', 'completed', 'live'].includes(status)) return false;
   return getStartTime(tournament) > new Date();
 };
-const route = (path) => `${import.meta.env.BASE_URL}${path.replace(/^\//, '')}`;
+const route = (path) => `${import.meta.env.BASE_URL}${String(path).replace(/^\//, '')}`;
 
 function TournamentPage() {
   const [query, setQuery] = useState('');
@@ -34,7 +43,7 @@ function TournamentPage() {
   // admin publishes appear here without any duplicated hardcoded data.
   const tournaments = getAllTournaments();
 
-  const path = window.location.pathname.replace(/^\/The-Turf-/, '') || '/';
+  const path = normalizePath();
   const isDetail = path.startsWith('/tournaments/');
   const routeId = path.split('/').filter(Boolean)[1];
   const selectedTournament = tournaments.find((tournament) => tournament.id === (selectedId || routeId)) || null;
@@ -115,6 +124,7 @@ function TournamentPage() {
           {featuredTournament && <section className="featured-tournament tournament-reveal" data-tournament-reveal>
             <div className="featured-image"><img src={featuredTournament.image} alt={`${featuredTournament.sport} tournament action`} /></div>
             <div className="featured-content"><span className="section-kicker">THE NEXT BIG GAME</span><span className="sport-chip">{featuredTournament.sport}</span><h2>{featuredTournament.name}</h2><p className="featured-description">{featuredTournament.description}</p><div className="tournament-meta-grid"><Meta icon="◷" label="DATE" value={featuredTournament.dateLabel} /><Meta icon="⌖" label="VENUE" value={featuredTournament.venueName} /><Meta icon="♙" label="TEAMS" value={`${featuredTournament.teamCapacity} Teams`} /><Meta icon="◇" label="FORMAT" value={featuredTournament.format} /><Meta icon="✦" label="PRIZE POOL" value={featuredTournament.prizePool} /></div><div className="featured-footer"><StatusBadge status="UPCOMING" /><button type="button" className="link-button" onClick={() => openTournament(featuredTournament)}>View Tournament</button></div></div>
+              <div className="featured-content"><span className="section-kicker">THE NEXT BIG GAME</span><span className="sport-chip">{featuredTournament.sport}</span><h2>{featuredTournament.name}</h2><p className="featured-description">{featuredTournament.description}</p><div className="tournament-meta-grid"><Meta icon="◷" label="DATE" value={featuredTournament.dateLabel} /><Meta icon="⌖" label="VENUE" value={featuredTournament.venueName} /><Meta icon="♙" label={featuredTournament.registrationType === 'Individual' ? 'PLAYERS' : 'TEAMS'} value={`${featuredTournament.teamCapacity} ${featuredTournament.registrationType === 'Individual' ? 'Players' : 'Teams'}`} /><Meta icon="◇" label="FORMAT" value={featuredTournament.format} /><Meta icon="₹" label="ENTRY FEE" value={featuredTournament.entryFee || '₹200 per player'} /><Meta icon="✦" label="PRIZE POOL" value={featuredTournament.prizePool || '—'} /></div><div className="featured-footer"><StatusBadge status="UPCOMING" /><button type="button" className="link-button" onClick={() => openTournament(featuredTournament)}>View Tournament</button></div></div>
           </section>}
 
           <div className="section-heading tournament-list-heading tournament-reveal" data-tournament-reveal><div><span className="section-kicker">UPCOMING IN VADODARA</span><h2>FIND YOUR NEXT COMPETITION.</h2></div><span className="result-count">{filteredTournaments.length} TOURNAMENTS</span></div>
@@ -133,17 +143,112 @@ function TournamentDetail({ tournament, navigate }) {
   const matchData = getTournamentMatches(tournament.id);
   const bracketRounds = getTournamentBracket(tournament, matchData);
   const tournamentResult = tournament.finalResult ? { winner: tournament.winner, finalResult: tournament.finalResult } : null;
+  const player = getLoggedInPlayer();
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [form, setForm] = useState({ teamName: '', participantCount: 1 });
+  const [joinStatus, setJoinStatus] = useState('');
+
+  useEffect(() => {
+    if (!joinOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const previousPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.overflow = 'hidden';
+    if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.paddingRight = previousPaddingRight;
+    };
+  }, [joinOpen]);
+
+  const existingRegistration = useMemo(() => {
+    if (!player) return null;
+    const state = getDemoState();
+    return (state.registrations || []).find((registration) => registration.tournamentId === tournament.id && registration.playerId === player.id) || null;
+  }, [player, tournament.id]);
+
+  const feeText = tournament.entryFee || '₹200 per player';
+  const totalFee = calculateTournamentFee(feeText, Math.max(Number(form.participantCount) || 1, 1), tournament.registrationType || 'Individual');
+
+  const openJoinFlow = () => {
+    if (!player) {
+      navigate('/login');
+      return;
+    }
+    setJoinOpen(true);
+    setJoinStatus('');
+    setForm({ teamName: `${player.firstName} ${player.surname}`, participantCount: 1 });
+  };
+
+  const submitRegistration = () => {
+    if (!player) {
+      navigate('/login');
+      return;
+    }
+
+    const result = createTournamentRegistration({
+      tournamentId: tournament.id,
+      playerId: player.id,
+      playerName: `${player.firstName} ${player.surname}`,
+      teamName: form.teamName || `${player.firstName} ${player.surname}`,
+      captain: `${player.firstName} ${player.surname}`,
+      email: player.email,
+      mobile: player.mobile,
+      participantCount: Math.max(Number(form.participantCount) || 1, 1),
+      registrationType: tournament.registrationType || 'Individual',
+      entryFee: feeText,
+    });
+
+    if (!result.ok) {
+      setJoinStatus(result.error);
+      return;
+    }
+
+    setJoinOpen(false);
+    setJoinStatus('Registration created and sent for payment verification.');
+    window.location.reload();
+  };
+
   return (
     <div className="page-shell tournament-page tournament-detail-page">
       <GlobalHeader />
       <main>
         <section className="detail-hero"><div className="detail-hero-backdrop" style={{ backgroundImage: `linear-gradient(90deg, rgba(4, 9, 8, 0.94), rgba(4, 9, 8, 0.58)), url('${tournament.image}')` }} /><div className="container detail-hero-content tournament-reveal" data-tournament-reveal><button type="button" className="back-link" onClick={() => navigate('/tournaments')}>← Back to Tournaments</button><span className="eyebrow">{tournament.sport}</span><h1>{tournament.name}</h1><p>{tournament.dateLabel} <span>/</span> {tournament.venueName}</p><StatusBadge status={tournament.status} /></div></section>
-        <section className="detail-info-strip"><div className="container detail-info-grid"><Meta icon="◷" label="DATE" value={tournament.dateLabel} /><Meta icon="⌖" label="VENUE" value={venue?.name || tournament.venueName} /><Meta icon="✦" label="SPORT" value={tournament.sport} /><Meta icon="◇" label="FORMAT" value={tournament.format} /><Meta icon="♙" label="TEAMS" value={`${tournament.teamCapacity}`} /><Meta icon="◆" label="PRIZE" value={tournament.prizePool} /></div></section>
-        <section className="detail-content container section-spacing"><div className="detail-main-column"><section className="detail-block tournament-reveal" data-tournament-reveal><span className="section-kicker">TOURNAMENT OVERVIEW</span><h2>BUILT FOR THE NEXT<br />GREAT MATCH.</h2><p>{tournament.description}</p><div className="overview-facts"><Meta icon="◇" label="TOURNAMENT FORMAT" value={tournament.format} /><Meta icon="♙" label="TEAM CAPACITY" value={`${tournament.teamCapacity} Teams`} /><Meta icon="⚑" label="MATCH TYPE" value={tournament.matchType} /><Meta icon="✓" label="REGISTRATION" value={tournament.status} /></div></section><section className="detail-block tournament-reveal" data-tournament-reveal><span className="section-kicker">PARTICIPANTS</span><h2>TEAMS IN THE TOURNAMENT.</h2><div className="teams-grid">{tournament.teams.map((team) => <article className="team-card" key={team.name}><span className="team-mark">{team.name.slice(0, 2).toUpperCase()}</span><div><h3>{team.name}</h3><p>Captain <strong>{team.captain}</strong></p><span className="team-status">{team.status}</span></div></article>)}</div></section></div><aside className="detail-side-column"><div className="join-panel"><span className="section-kicker">READY TO COMPETE?</span><h3>Take your place in the next game.</h3><p>Join the platform to discover sporting opportunities in Vadodara.</p><button type="button" className="btn btn-primary" onClick={() => navigate('/signup')}>Join Tournament</button></div><div className="venue-panel"><span className="section-kicker">PLAYING AT</span><h3>{venue?.name || tournament.venueName}</h3><p>{venue?.area || tournament.area}, Vadodara</p><span>{venue?.openingHours || 'Tournament venue'}</span></div></aside></section>
+        <section className="detail-info-strip"><div className="container detail-info-grid"><Meta icon="◷" label="DATE" value={tournament.dateLabel} /><Meta icon="⌖" label="VENUE" value={venue?.name || tournament.venueName} /><Meta icon="✦" label="SPORT" value={tournament.sport} /><Meta icon="◇" label="FORMAT" value={tournament.format} /><Meta icon="♙" label={tournament.registrationType === 'Individual' ? 'PLAYERS' : 'TEAMS'} value={`${tournament.teamCapacity} ${tournament.registrationType === 'Individual' ? 'Players' : 'Teams'}`} /><Meta icon="₹" label="ENTRY FEE" value={tournament.entryFee || '₹200 per player'} /><Meta icon="◆" label="PRIZE" value={tournament.prizePool || '—'} /></div></section>
+        <section className="detail-content container section-spacing"><div className="detail-main-column"><section className="detail-block tournament-reveal" data-tournament-reveal><span className="section-kicker">TOURNAMENT OVERVIEW</span><h2>BUILT FOR THE NEXT<br />GREAT MATCH.</h2><p>{tournament.description}</p><div className="overview-facts"><Meta icon="◇" label="TOURNAMENT FORMAT" value={tournament.format} /><Meta icon="♙" label="TEAM CAPACITY" value={`${tournament.teamCapacity} Teams`} /><Meta icon="⚑" label="MATCH TYPE" value={tournament.matchType} /><Meta icon="✓" label="REGISTRATION" value={tournament.status} /></div></section><section className="detail-block tournament-reveal" data-tournament-reveal><span className="section-kicker">PARTICIPANTS</span><h2>{tournament.registrationType === 'Individual' ? 'PLAYERS IN THE TOURNAMENT.' : 'TEAMS IN THE TOURNAMENT.'}</h2><div className="teams-grid">{tournament.teams.map((team) => <article className="team-card" key={team.name}><span className="team-mark">{team.name.slice(0, 2).toUpperCase()}</span><div><h3>{team.name}</h3><p>Captain <strong>{team.captain}</strong></p><span className="team-status">{team.status}</span></div></article>)}</div></section></div><aside className="detail-side-column"><div className="join-panel"><span className="section-kicker">READY TO COMPETE?</span><h3>Take your place in the next game.</h3><p>Join the platform to discover sporting opportunities in Vadodara.</p>{existingRegistration ? <button type="button" className="btn btn-secondary" disabled>{existingRegistration.status === 'approved' ? 'Registered' : 'Registration Pending'}</button> : <button type="button" className="btn btn-primary" onClick={openJoinFlow}>Join Tournament</button>} {joinStatus && <p className="admin-detail-note" style={{ marginTop: '12px' }}>{joinStatus}</p>}</div><div className="venue-panel"><span className="section-kicker">PLAYING AT</span><h3>{venue?.name || tournament.venueName}</h3><p>{venue?.area || tournament.area}, Vadodara</p><span>{venue?.openingHours || 'Tournament venue'}</span></div></aside></section>
         <section className="format-section section-spacing"><div className="container"><div className="section-heading centered-heading"><span className="section-kicker">TOURNAMENT FORMAT</span><h2>HOW THE TOURNAMENT WORKS.</h2><p>A simple demo structure that makes the route from first round to final easy to follow.</p></div><div className="format-flow">{tournament.bracket.rounds.map((round, index) => <div className="format-step" key={round.name}><span>0{index + 1}</span><strong>{round.name}</strong>{index < tournament.bracket.rounds.length - 1 && <i>↓</i>}</div>)}</div></div></section>
         <section className="bracket-section section-spacing container"><div className="section-heading"><span className="section-kicker">VISUAL BRACKET</span><h2>FOLLOW THE COMPETITION.</h2>{tournamentResult?.winner && <p>Champion: <strong>{tournamentResult.winner}</strong></p>}</div><div className="bracket-scroll"><div className="bracket-board">{bracketRounds.map((round) => <div className="bracket-round" key={round.name}><h3>{round.name}</h3>{round.games.map((game, index) => <div className="bracket-game" key={`${round.name}-${index}`}><span>{game.teams[0] || 'TBD'}{game.result?.teamAScore ? ` · ${game.result.teamAScore}` : ''}</span><span>{game.teams[1] || 'TBD'}{game.result?.teamBScore ? ` · ${game.result.teamBScore}` : ''}</span></div>)}</div>)}<div className="bracket-round champion-round"><h3>CHAMPION</h3><div className="bracket-game"><span>{tournamentResult?.winner || 'Final Winner'}</span></div></div></div></div></section>
-        <section className="detail-bottom-cta section-spacing"><div className="container"><span className="section-kicker">MAKE YOUR MARK</span><h2>READY TO COMPETE?</h2><p>Join the platform and discover upcoming sporting opportunities in Vadodara.</p><div className="cta-actions"><button type="button" className="btn btn-primary" onClick={() => navigate('/signup')}>Join Tournament</button><button type="button" className="btn btn-secondary" onClick={() => navigate('/tournaments')}>Explore More Tournaments</button></div></div></section>
+        <section className="detail-bottom-cta section-spacing"><div className="container"><span className="section-kicker">MAKE YOUR MARK</span><h2>READY TO COMPETE?</h2><p>Join the platform and discover upcoming sporting opportunities in Vadodara.</p><div className="cta-actions"><button type="button" className="btn btn-primary" onClick={openJoinFlow}>{existingRegistration ? (existingRegistration.status === 'approved' ? 'Registered' : 'Registration Pending') : 'Join Tournament'}</button><button type="button" className="btn btn-secondary" onClick={() => navigate('/tournaments')}>Explore More Tournaments</button></div></div></section>
       </main>
+      {joinOpen && (
+        <div className="review-modal-backdrop">
+          <section className="review-modal payment-modal tournament-registration-modal" role="dialog" aria-modal="true" aria-labelledby="tournament-registration-title">
+            <button type="button" className="modal-close" onClick={() => setJoinOpen(false)}>×</button>
+            <span className="section-kicker">TOURNAMENT REGISTRATION</span>
+            <h2 id="tournament-registration-title">{tournament.name}</h2>
+            <div className="player-payment-modal-body">
+              <div className="qr-code player-payment-qr" aria-label="Demo payment QR code" style={{ backgroundImage: `url(${scannerImage})`, backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }} />
+              <div className="player-payment-amount">
+                <strong>Registration fee: ₹{new Intl.NumberFormat('en-IN').format(totalFee)}</strong>
+                <p>Demo QR only. Payments are not processed or verified here. Registration remains pending until a trusted payment provider confirms payment.</p>
+                <label className="form-field" style={{ marginTop: 12 }}>
+                  <span>Participant name</span>
+                  <input value={form.teamName} onChange={(event) => setForm((current) => ({ ...current, teamName: event.target.value }))} placeholder="Name for this registration" />
+                </label>
+                <label className="form-field">
+                  <span>Number of players</span>
+                  <input type="number" min="1" value={form.participantCount} onChange={(event) => setForm((current) => ({ ...current, participantCount: event.target.value }))} />
+                </label>
+              </div>
+            </div>
+            {joinStatus && <p className="admin-detail-note danger" style={{ marginBottom: 12 }}>{joinStatus}</p>}
+            <div className="review-actions payment-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setJoinOpen(false)}>Cancel</button>
+              <button type="button" className="btn btn-primary" onClick={submitRegistration}>Submit Registration</button>
+            </div>
+          </section>
+        </div>
+      )}
       <Footer />
     </div>
   );
@@ -154,7 +259,14 @@ function TournamentCard({ tournament, index, onOpen }) {
 }
 
 function Meta({ icon, label, value }) {
-  return <div className="tournament-meta"><span className="meta-icon" aria-hidden="true">{icon}</span><div><span>{label}</span><strong>{value}</strong></div></div>;
+  const tournamentId = normalizePath().split('/').filter(Boolean).at(-1);
+  const currentTournament = label === 'TEAM CAPACITY'
+    ? getAllTournaments().find((item) => item.id === tournamentId)
+    : null;
+  const isIndividualCapacity = currentTournament?.registrationType === 'Individual';
+  const displayLabel = isIndividualCapacity ? 'PLAYER CAPACITY' : label;
+  const displayValue = isIndividualCapacity ? `${currentTournament.teamCapacity} Players` : value;
+  return <div className="tournament-meta"><span className="meta-icon" aria-hidden="true">{icon}</span><div><span>{displayLabel}</span><strong>{displayValue}</strong></div></div>;
 }
 
 function StatusBadge({ status }) {

@@ -1,5 +1,6 @@
-import { createId, getDemoState, saveDemoState } from './demoStore';
-import { ACTIVITY_TYPES, recordActivity } from './activityStore';
+import { createId, getDemoState, saveDemoState } from './demoStore.js';
+import { ACTIVITY_TYPES, recordActivity } from './activityStore.js';
+import { tournaments as catalogueTournaments } from './tournaments.js';
 
 // ---------------------------------------------------------------------------
 // Admin tournament management
@@ -72,6 +73,8 @@ const numeric = (value) => {
 const buildRecord = (input, existing = {}) => {
   const start = input.startDate || input.date || '';
   const venueName = input.venueName || '';
+  const registrationType = input.registrationType || 'Team';
+  const sportImage = catalogueTournaments.find((item) => item.sport === input.sport)?.image || '';
   return {
     ...existing,
     id: existing.id || createId('tournament'),
@@ -99,7 +102,7 @@ const buildRecord = (input, existing = {}) => {
     dateLabel: formatDateLabel(start),
 
     // Registration
-    registrationType: input.registrationType || 'Team',
+    registrationType,
     maxTeams: numeric(input.maxTeams),
     minTeams: numeric(input.minTeams),
     maxPlayers: numeric(input.maxPlayers),
@@ -122,7 +125,7 @@ const buildRecord = (input, existing = {}) => {
     skillLevel: input.skillLevel || 'Open',
 
     // Images
-    image: input.coverImage || input.image || '',
+    image: input.coverImage || input.image || sportImage,
     coverImage: input.coverImage || '',
     posterImage: input.posterImage || '',
 
@@ -133,7 +136,7 @@ const buildRecord = (input, existing = {}) => {
     whatsappNumber: input.whatsappNumber || '',
 
     // Capacity aliases the public cards read.
-    teamCapacity: numeric(input.maxTeams),
+    teamCapacity: numeric(registrationType === 'Individual' ? input.maxPlayers : input.maxTeams),
     registeredTeams: existing.registeredTeams || 0,
   };
 };

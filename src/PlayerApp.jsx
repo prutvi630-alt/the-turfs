@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { API_URL, apiRequest } from './config/api';
-import { route } from './config/routes';
+import { normalizePath, route } from './config/routes';
 import { sports, turfs } from './data/homeData';
-import { tournaments } from './data/tournaments';
+import { getAllTournaments } from './data/dashboardSelectors';
 import GlobalHeader from './GlobalHeader';
 import Footer from './Footer';
 import scannerImage from './data/scanner.jpeg';
@@ -14,6 +14,7 @@ import {
   authenticateUser,
   calculateAge,
   checkAdminAccess,
+  createDemoPlayerRegistration,
   createId,
   dashboardPathForRole,
   findDuplicateContact,
@@ -40,8 +41,35 @@ const appNav = [
 
 const blankForm = {
   firstName: '', surname: '', dob: '', mobile: '', email: '', password: '',
-  house: '', street: '', landmark: '', pincode: '', sportId: '', selectedTurfId: '', profileImage: '',
+  house: '', street: '', landmark: '', pincode: '', sports: [], sportIds: [], selectedTurfIds: [], profileImage: '',
 };
+
+const getPlayerGames = (player) => {
+  const values = [player?.sports, player?.games, player?.sportIds].find((items) => Array.isArray(items) && items.length)
+    || [player?.sportId];
+  return [...new Set(values.filter(Boolean).map((value) => {
+    const game = sports.find((item) => item.id === value || item.name.toLowerCase() === String(value).toLowerCase());
+    return game?.name || String(value);
+  }))];
+};
+
+const getPlayerTurfIds = (player) => [...new Set(
+  (Array.isArray(player?.selectedTurfIds) && player.selectedTurfIds.length
+    ? player.selectedTurfIds
+    : [player?.selectedTurfId]).filter(Boolean),
+)];
+
+const turfSupportsSport = (turf, sportName) => (turf?.sports || []).some(
+  (name) => String(name).toLowerCase() === String(sportName).toLowerCase(),
+);
+
+const getGameTurfSelections = (sportNames, turfIds) => sportNames.flatMap((sportName) => {
+  const sport = sports.find((item) => item.name === sportName);
+  return turfIds
+    .map((turfId) => getTurf(turfId))
+    .filter((turf) => turf && turfSupportsSport(turf, sportName))
+    .map((turf) => ({ sportId: sport?.id || sportName, sportName, turfId: turf.id }));
+});
 
 const CLIFT_PLAYER_KEY = 'cliftPlayer';
 const CLIFT_PLAYER_LOGGED_IN_KEY = 'cliftPlayerLoggedIn';
@@ -141,7 +169,7 @@ const compressImage = (file) => new Promise((resolve, reject) => {
 });
 
 function PlayerApp() {
-  const path = window.location.pathname.replace(/^\/The-Turf-/, '') || '/';
+  const path = normalizePath();
   const [state, setState] = useState(getDemoState);
   const [session, setCurrentSession] = useState(() => {
     const storedSession = getSession();
@@ -228,7 +256,7 @@ function AuthFrame({ children, eyebrow, title, text }) {
 }
 
 function SignupPage() {
-  return <AuthFrame eyebrow="JOIN THE PLATFORM" title="HOW DO YOU WANT TO JOIN?" text="Choose how you want to be part of the Vadodara Sports Platform."><div className="registration-choice-grid"><RegistrationChoice icon="◉" title="Player Registration" text="Create your player profile, choose your sport, discover turfs and stay connected with upcoming matches and tournaments." action="Register as Player" onClick={() => navigate('/player/register')} /><RegistrationChoice icon="⌂" title="Turf Registration" text="Register your sports venue and connect with players looking for a place to play." action="Register Your Turf" onClick={() => navigate('/turf-owner/register')} /></div><p className="auth-footer-note">Already part of the platform? <button type="button" onClick={() => navigate('/login')}>Login here</button></p></AuthFrame>;
+  return <AuthFrame eyebrow="JOIN THE PLATFORM" title="HOW DO YOU WANT TO JOIN?" text="Choose how you want to be part of the Vadodara Sports Platform."><div className="registration-choice-grid"><RegistrationChoice icon="🏃" title="Player Registration" text="Create your player profile, choose your sport, discover turfs and stay connected with upcoming matches and tournaments." action="Register as Player" onClick={() => navigate('/player/register')} /><RegistrationChoice icon="🏟️" title="Turf Registration" text="Register your sports venue and connect with players looking for a place to play." action="Register Your Turf" onClick={() => navigate('/turf-owner/register')} /></div><p className="auth-footer-note">Already part of the platform? <button type="button" onClick={() => navigate('/login')}>Login here</button></p></AuthFrame>;
 }
 
 function RegistrationChoice({ icon, title, text, action, onClick }) {
@@ -483,14 +511,14 @@ function TurfOwnerRegistration() {
           form.turfLength ? `${form.turfLength} ${form.turfSizeUnit}` : '',
           form.turfWidth ? `${form.turfWidth} ${form.turfSizeUnit}` : '',
           form.playingAreas ? `${form.playingAreas} playing area${Number(form.playingAreas) > 1 ? 's' : ''}` : '',
-        ].filter(Boolean).join(' × '),
+        ].filter(Boolean).join(' Ã— '),
         sports: form.sports,
         games: form.sports,
         facilities: form.facilities,
         openingHours: formatOpeningHours(form.openingHours),
         area: form.turfArea || form.turfCity || 'Vadodara',
         location: form.locationLabel || `${form.turfArea || 'Vadodara'}, ${form.turfCity || 'Vadodara'}`,
-        price: '₹550 / hour',
+        price: 'â‚¹550 / hour',
         image: form.primaryImage || (form.turfImages[0] || ''),
         images: form.turfImages.length ? form.turfImages : [form.primaryImage],
         primaryImage: form.primaryImage || (form.turfImages[0] || ''),
@@ -603,11 +631,11 @@ function TurfOwnerRegistration() {
     }
   };
 
-  return <div className="player-app registration-page"><GlobalHeader /><main className="registration-main container"><div className="registration-heading"><span className="section-kicker">TURF REGISTRATION</span><h1>REGISTER YOUR TURF.</h1><p>Share the owner details and turf information needed to list your venue on the platform.</p></div><form className="registration-form" onSubmit={submit}>{errors.duplicate && <div className="form-alert">{errors.duplicate}</div>}<section className="form-section"><FormSectionTitle number="01" title="Owner Information" /><div className="form-grid two"><Field label="Full Name" value={form.ownerName} onChange={(value) => setField('ownerName', value)} placeholder="Owner's full name" error={errors.ownerName} required /><Field label="Mobile Number" value={form.ownerMobile} onChange={(value) => setField('ownerMobile', value)} placeholder="98765 43210" error={errors.ownerMobile} required /><Field label="Email Address" type="email" value={form.ownerEmail} onChange={(value) => setField('ownerEmail', value)} placeholder="owner@domain.com" error={errors.ownerEmail} required /><Field label="Alternate Contact Number" value={form.alternateMobile} onChange={(value) => setField('alternateMobile', value)} placeholder="Optional" error={errors.alternateMobile} /><div className="form-field photo-field" style={{ gridColumn: '1 / -1' }}><span>Profile Photo <b>*</b></span><div className="photo-upload"><div className="photo-preview">{form.profilePhoto ? <img src={form.profilePhoto} alt="Owner profile preview" /> : 'OP'}</div><label className="btn btn-secondary upload-button">Upload Photo<input type="file" accept="image/*" onChange={handlePhoto} /></label></div>{errors.profilePhoto && <small className="inline-error">{errors.profilePhoto}</small>}</div></div><div className="form-grid two" style={{ marginTop: '18px' }}><Field label="House / Building / Shop Number" value={form.ownerHouse} onChange={(value) => setField('ownerHouse', value)} placeholder="12 / B-14" error={errors.ownerHouse} required /><Field label="Street / Area" value={form.ownerStreet} onChange={(value) => setField('ownerStreet', value)} placeholder="Alkapuri, Vadodara" error={errors.ownerStreet} required /><Field label="City" value={form.ownerCity} onChange={(value) => setField('ownerCity', value)} placeholder="Vadodara" error={errors.ownerCity} required /><Field label="State" value={form.ownerState} onChange={(value) => setField('ownerState', value)} placeholder="Gujarat" required /><Field label="Pincode" value={form.ownerPincode} onChange={(value) => setField('ownerPincode', value)} placeholder="390001" error={errors.ownerPincode} required /></div></section><section className="form-section"><FormSectionTitle number="02" title="Turf Details" /><div className="form-grid two"><Field label="Turf Name" value={form.turfName} onChange={(value) => setField('turfName', value)} placeholder="ABC Sports Arena" error={errors.turfName} required /><Field label="Turf Type" value={form.turfType} onChange={(value) => setField('turfType', value)} placeholder="Football / Cricket / Multi-sport" /></div><Field label="Turf Description" value={form.turfDescription} onChange={(value) => setField('turfDescription', value)} placeholder="Describe your turf" error={errors.turfDescription} required /><div className="form-grid two" style={{ marginTop: '18px' }}><Field label="Length" value={form.turfLength} onChange={(value) => setField('turfLength', value)} placeholder="120" /><Field label="Width" value={form.turfWidth} onChange={(value) => setField('turfWidth', value)} placeholder="80" /><Field label="Total Size / Area" value={form.playingAreas} onChange={(value) => setField('playingAreas', value)} placeholder="2 courts / 9600 sq ft" /><Field label="Unit" value={form.turfSizeUnit} onChange={(value) => setField('turfSizeUnit', value)} placeholder="ft" /></div>{errors.turfSize && <small className="inline-error">{errors.turfSize}</small>}</section><section className="form-section"><FormSectionTitle number="03" title="Sports / Games Available" /><p className="form-section-note">Select all the sports that can be played on this turf.</p><div className="sport-choice-grid">{['Cricket', 'Football', 'Pickleball', 'Tennis', 'Badminton'].map((sport) => <button type="button" key={sport} className={`sport-choice ${form.sports.includes(sport) ? 'selected' : ''}`} onClick={() => toggleSelection('sports', sport)}><span>{sport === 'Cricket' ? '🏏' : sport === 'Football' ? '⚽' : sport === 'Pickleball' ? '🏓' : sport === 'Tennis' ? '🎾' : '🏸'}</span><strong>{sport}</strong><i>{form.sports.includes(sport) ? 'Selected' : 'Available'}</i></button>)}</div>{errors.sports && <small className="inline-error">{errors.sports}</small>}</section><section className="form-section"><FormSectionTitle number="04" title="Facilities / Amenities" /><div className="sport-choice-grid">{['Parking', 'Washroom', 'Changing Room', 'Drinking Water', 'Flood Lights', 'Seating Area', 'Equipment', 'Cafe', 'Other'].map((facility) => <button type="button" key={facility} className={`sport-choice ${form.facilities.includes(facility) ? 'selected' : ''}`} onClick={() => toggleSelection('facilities', facility)}><span>{facility === 'Parking' ? '🚗' : facility === 'Washroom' ? '🚻' : facility === 'Changing Room' ? '🧴' : facility === 'Drinking Water' ? '💧' : facility === 'Flood Lights' ? '💡' : facility === 'Seating Area' ? '🪑' : facility === 'Equipment' ? '🏋️' : facility === 'Cafe' ? '☕' : '✨'}</span><strong>{facility}</strong><i>{form.facilities.includes(facility) ? 'Included' : 'Optional'}</i></button>)}</div></section><section className="form-section"><FormSectionTitle number="05" title="Opening Hours" /><div className="form-grid two">{openingDays.map((day) => <div key={day} className="form-field" style={{ display: 'grid', gap: '12px' }}><span>{day}</span><div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}><button type="button" className={`btn ${form.openingHours[day].open ? 'btn-primary' : 'btn-secondary'}`} onClick={() => handleOpeningToggle(day)}>{form.openingHours[day].open ? 'Open' : 'Closed'}</button>{form.openingHours[day].open && <><input type="time" value={form.openingHours[day].from} onChange={(event) => updateOpeningTime(day, 'from', event.target.value)} /><input type="time" value={form.openingHours[day].to} onChange={(event) => updateOpeningTime(day, 'to', event.target.value)} /></>}</div></div>)}</div>{errors.openingHours && <small className="inline-error">{errors.openingHours}</small>}</section><section className="form-section"><FormSectionTitle number="06" title="Turf Location & Address" /><div className="form-grid two"><Field label="House / Building / Plot" value={form.turfHouse} onChange={(value) => setField('turfHouse', value)} placeholder="Plot 12" error={errors.turfHouse} required /><Field label="Street / Road" value={form.turfStreet} onChange={(value) => setField('turfStreet', value)} placeholder="Near Ring Road" error={errors.turfStreet} required /><Field label="Area / Locality" value={form.turfArea} onChange={(value) => setField('turfArea', value)} placeholder="Alkapuri" /><Field label="City" value={form.turfCity} onChange={(value) => setField('turfCity', value)} placeholder="Vadodara" error={errors.turfCity} required /><Field label="State" value={form.turfState} onChange={(value) => setField('turfState', value)} placeholder="Gujarat" /><Field label="Pincode" value={form.turfPincode} onChange={(value) => setField('turfPincode', value)} placeholder="390001" error={errors.turfPincode} required /><Field label="Location" value={form.locationLabel} onChange={(value) => setField('locationLabel', value)} placeholder="Near Alkapuri, Vadodara" style={{ gridColumn: '1 / -1' }} /></div></section><section className="form-section"><FormSectionTitle number="07" title="Turf Images" /><div className="photo-upload"><div className="photo-preview" style={{ borderRadius: '18px', width: '140px', height: '90px' }}>{form.primaryImage ? <img src={form.primaryImage} alt="Primary turf preview" /> : 'Turf'}</div><label className="btn btn-secondary upload-button">Upload Turf Images<input type="file" accept="image/*" multiple onChange={handleTurfImages} /></label></div>{form.turfImages.length > 0 && <div className="form-grid two" style={{ marginTop: '18px' }}>{form.turfImages.slice(0, 6).map((image, index) => <div key={`${image}-${index}`} className="photo-preview" style={{ width: '100%', height: '120px', borderRadius: '12px' }}><img src={image} alt={`Turf image ${index + 1}`} /></div>)}</div>}{errors.primaryImage && <small className="inline-error">{errors.primaryImage}</small>}</section><section className="form-section"><FormSectionTitle number="08" title="Additional Turf Information" /><div className="form-grid two"><Field label="Contact Number for Turf" value={form.contactNumber || form.ownerMobile} onChange={(value) => setField('contactNumber', value)} placeholder="98765 43210" error={errors.contactNumber} /><Field label="Turf Email" type="email" value={form.turfEmail || form.ownerEmail} onChange={(value) => setField('turfEmail', value)} error={errors.turfEmail} placeholder="hello@turf.com" /><Field label="Booking Instructions" value={form.bookingInstructions} onChange={(value) => setField('bookingInstructions', value)} placeholder="Optional booking guidance for customers" style={{ gridColumn: '1 / -1' }} /><Field label="Rules / Restrictions" value={form.rules} onChange={(value) => setField('rules', value)} placeholder="No outside food, shoes only, etc." style={{ gridColumn: '1 / -1' }} /></div></section><div className="registration-actions"><button type="button" className="btn btn-secondary" onClick={() => navigate('/signup')}>Back</button><button type="submit" className="btn btn-primary">Review Registration</button></div></form>{review && <TurfReviewModal form={form} onClose={() => setReview(false)} onConfirm={registerTurf} />}</main><Footer /></div>;
+  return <div className="player-app registration-page"><GlobalHeader /><main className="registration-main container"><div className="registration-heading"><span className="section-kicker">TURF REGISTRATION</span><h1>REGISTER YOUR TURF.</h1><p>Share the owner details and turf information needed to list your venue on the platform.</p></div><form className="registration-form" onSubmit={submit}>{errors.duplicate && <div className="form-alert">{errors.duplicate}</div>}<section className="form-section"><FormSectionTitle number="01" title="Owner Information" /><div className="form-grid two"><Field label="Full Name" value={form.ownerName} onChange={(value) => setField('ownerName', value)} placeholder="Owner's full name" error={errors.ownerName} required /><Field label="Mobile Number" value={form.ownerMobile} onChange={(value) => setField('ownerMobile', value)} placeholder="98765 43210" error={errors.ownerMobile} required /><Field label="Email Address" type="email" value={form.ownerEmail} onChange={(value) => setField('ownerEmail', value)} placeholder="owner@domain.com" error={errors.ownerEmail} required /><Field label="Alternate Contact Number" value={form.alternateMobile} onChange={(value) => setField('alternateMobile', value)} placeholder="Optional" error={errors.alternateMobile} /><div className="form-field photo-field" style={{ gridColumn: '1 / -1' }}><span>Profile Photo <b>*</b></span><div className="photo-upload"><div className="photo-preview">{form.profilePhoto ? <img src={form.profilePhoto} alt="Owner profile preview" /> : 'OP'}</div><label className="btn btn-secondary upload-button">Upload Photo<input type="file" accept="image/*" onChange={handlePhoto} /></label></div>{errors.profilePhoto && <small className="inline-error">{errors.profilePhoto}</small>}</div></div><div className="form-grid two" style={{ marginTop: '18px' }}><Field label="House / Building / Shop Number" value={form.ownerHouse} onChange={(value) => setField('ownerHouse', value)} placeholder="12 / B-14" error={errors.ownerHouse} required /><Field label="Street / Area" value={form.ownerStreet} onChange={(value) => setField('ownerStreet', value)} placeholder="Alkapuri, Vadodara" error={errors.ownerStreet} required /><Field label="City" value={form.ownerCity} onChange={(value) => setField('ownerCity', value)} placeholder="Vadodara" error={errors.ownerCity} required /><Field label="State" value={form.ownerState} onChange={(value) => setField('ownerState', value)} placeholder="Gujarat" required /><Field label="Pincode" value={form.ownerPincode} onChange={(value) => setField('ownerPincode', value)} placeholder="390001" error={errors.ownerPincode} required /></div></section><section className="form-section"><FormSectionTitle number="02" title="Turf Details" /><div className="form-grid two"><Field label="Turf Name" value={form.turfName} onChange={(value) => setField('turfName', value)} placeholder="ABC Sports Arena" error={errors.turfName} required /><Field label="Turf Type" value={form.turfType} onChange={(value) => setField('turfType', value)} placeholder="Football / Cricket / Multi-sport" /></div><Field label="Turf Description" value={form.turfDescription} onChange={(value) => setField('turfDescription', value)} placeholder="Describe your turf" error={errors.turfDescription} required /><div className="form-grid two" style={{ marginTop: '18px' }}><Field label="Length" value={form.turfLength} onChange={(value) => setField('turfLength', value)} placeholder="120" /><Field label="Width" value={form.turfWidth} onChange={(value) => setField('turfWidth', value)} placeholder="80" /><Field label="Total Size / Area" value={form.playingAreas} onChange={(value) => setField('playingAreas', value)} placeholder="2 courts / 9600 sq ft" /><Field label="Unit" value={form.turfSizeUnit} onChange={(value) => setField('turfSizeUnit', value)} placeholder="ft" /></div>{errors.turfSize && <small className="inline-error">{errors.turfSize}</small>}</section><section className="form-section"><FormSectionTitle number="03" title="Sports / Games Available" /><p className="form-section-note">Select all the sports that can be played on this turf.</p><div className="sport-choice-grid">{['Cricket', 'Football', 'Pickleball', 'Tennis', 'Badminton'].map((sport) => <button type="button" key={sport} className={`sport-choice ${form.sports.includes(sport) ? 'selected' : ''}`} onClick={() => toggleSelection('sports', sport)}><span>{sport === 'Cricket' ? 'ðŸ' : sport === 'Football' ? 'âš½' : sport === 'Pickleball' ? 'ðŸ“' : sport === 'Tennis' ? 'ðŸŽ¾' : 'ðŸ¸'}</span><strong>{sport}</strong><i>{form.sports.includes(sport) ? 'Selected' : 'Available'}</i></button>)}</div>{errors.sports && <small className="inline-error">{errors.sports}</small>}</section><section className="form-section"><FormSectionTitle number="04" title="Facilities / Amenities" /><div className="sport-choice-grid">{['Parking', 'Washroom', 'Changing Room', 'Drinking Water', 'Flood Lights', 'Seating Area', 'Equipment', 'Cafe', 'Other'].map((facility) => <button type="button" key={facility} className={`sport-choice ${form.facilities.includes(facility) ? 'selected' : ''}`} onClick={() => toggleSelection('facilities', facility)}><span>{facility === 'Parking' ? 'ðŸš—' : facility === 'Washroom' ? 'ðŸš»' : facility === 'Changing Room' ? 'ðŸ§´' : facility === 'Drinking Water' ? 'ðŸ’§' : facility === 'Flood Lights' ? 'ðŸ’¡' : facility === 'Seating Area' ? 'ðŸª‘' : facility === 'Equipment' ? 'ðŸ‹ï¸' : facility === 'Cafe' ? 'â˜•' : 'âœ¨'}</span><strong>{facility}</strong><i>{form.facilities.includes(facility) ? 'Included' : 'Optional'}</i></button>)}</div></section><section className="form-section"><FormSectionTitle number="05" title="Opening Hours" /><div className="form-grid two">{openingDays.map((day) => <div key={day} className="form-field" style={{ display: 'grid', gap: '12px' }}><span>{day}</span><div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}><button type="button" className={`btn ${form.openingHours[day].open ? 'btn-primary' : 'btn-secondary'}`} onClick={() => handleOpeningToggle(day)}>{form.openingHours[day].open ? 'Open' : 'Closed'}</button>{form.openingHours[day].open && <><input type="time" value={form.openingHours[day].from} onChange={(event) => updateOpeningTime(day, 'from', event.target.value)} /><input type="time" value={form.openingHours[day].to} onChange={(event) => updateOpeningTime(day, 'to', event.target.value)} /></>}</div></div>)}</div>{errors.openingHours && <small className="inline-error">{errors.openingHours}</small>}</section><section className="form-section"><FormSectionTitle number="06" title="Turf Location & Address" /><div className="form-grid two"><Field label="House / Building / Plot" value={form.turfHouse} onChange={(value) => setField('turfHouse', value)} placeholder="Plot 12" error={errors.turfHouse} required /><Field label="Street / Road" value={form.turfStreet} onChange={(value) => setField('turfStreet', value)} placeholder="Near Ring Road" error={errors.turfStreet} required /><Field label="Area / Locality" value={form.turfArea} onChange={(value) => setField('turfArea', value)} placeholder="Alkapuri" /><Field label="City" value={form.turfCity} onChange={(value) => setField('turfCity', value)} placeholder="Vadodara" error={errors.turfCity} required /><Field label="State" value={form.turfState} onChange={(value) => setField('turfState', value)} placeholder="Gujarat" /><Field label="Pincode" value={form.turfPincode} onChange={(value) => setField('turfPincode', value)} placeholder="390001" error={errors.turfPincode} required /><Field label="Location" value={form.locationLabel} onChange={(value) => setField('locationLabel', value)} placeholder="Near Alkapuri, Vadodara" style={{ gridColumn: '1 / -1' }} /></div></section><section className="form-section"><FormSectionTitle number="07" title="Turf Images" /><div className="photo-upload"><div className="photo-preview" style={{ borderRadius: '18px', width: '140px', height: '90px' }}>{form.primaryImage ? <img src={form.primaryImage} alt="Primary turf preview" /> : 'Turf'}</div><label className="btn btn-secondary upload-button">Upload Turf Images<input type="file" accept="image/*" multiple onChange={handleTurfImages} /></label></div>{form.turfImages.length > 0 && <div className="form-grid two" style={{ marginTop: '18px' }}>{form.turfImages.slice(0, 6).map((image, index) => <div key={`${image}-${index}`} className="photo-preview" style={{ width: '100%', height: '120px', borderRadius: '12px' }}><img src={image} alt={`Turf image ${index + 1}`} /></div>)}</div>}{errors.primaryImage && <small className="inline-error">{errors.primaryImage}</small>}</section><section className="form-section"><FormSectionTitle number="08" title="Additional Turf Information" /><div className="form-grid two"><Field label="Contact Number for Turf" value={form.contactNumber || form.ownerMobile} onChange={(value) => setField('contactNumber', value)} placeholder="98765 43210" error={errors.contactNumber} /><Field label="Turf Email" type="email" value={form.turfEmail || form.ownerEmail} onChange={(value) => setField('turfEmail', value)} error={errors.turfEmail} placeholder="hello@turf.com" /><Field label="Booking Instructions" value={form.bookingInstructions} onChange={(value) => setField('bookingInstructions', value)} placeholder="Optional booking guidance for customers" style={{ gridColumn: '1 / -1' }} /><Field label="Rules / Restrictions" value={form.rules} onChange={(value) => setField('rules', value)} placeholder="No outside food, shoes only, etc." style={{ gridColumn: '1 / -1' }} /></div></section><div className="registration-actions"><button type="button" className="btn btn-secondary" onClick={() => navigate('/signup')}>Back</button><button type="submit" className="btn btn-primary">Review Registration</button></div></form>{review && <TurfReviewModal form={form} onClose={() => setReview(false)} onConfirm={registerTurf} />}</main><Footer /></div>;
 }
 
 function TurfReviewModal({ form, onClose, onConfirm }) {
-  return <div className="review-modal-backdrop"><section className="review-modal"><button type="button" className="modal-close" onClick={onClose}>×</button><span className="section-kicker">REVIEW TURF REGISTRATION</span><h2>FINAL CHECK</h2><div className="review-grid"><ReviewItem label="Owner Name" value={form.ownerName} /><ReviewItem label="Mobile" value={form.ownerMobile} /><ReviewItem label="Email" value={form.ownerEmail} /><ReviewItem label="Owner Address" value={`${form.ownerHouse}, ${form.ownerStreet}, ${form.ownerCity}, ${form.ownerState}`} /><ReviewItem label="Turf Name" value={form.turfName} /><ReviewItem label="Description" value={form.turfDescription} /><ReviewItem label="Sport(s)" value={form.sports.join(' • ')} /><ReviewItem label="Facilities" value={form.facilities.join(' • ')} /><ReviewItem label="Opening Hours" value={formatOpeningHours(form.openingHours)} /><ReviewItem label="Turf Address" value={`${form.turfHouse}, ${form.turfStreet}, ${form.turfArea || form.turfCity}, ${form.turfCity}`} /><ReviewItem label="Contact" value={form.contactNumber || form.ownerMobile} /><ReviewItem label="Primary Image" value={form.primaryImage ? 'Uploaded' : 'Not uploaded'} /></div><div className="review-actions"><button type="button" className="btn btn-secondary" onClick={onClose}>Edit</button><button type="button" className="btn btn-primary" onClick={onConfirm}>Register Turf</button></div></section></div>;
+  return <div className="review-modal-backdrop"><section className="review-modal"><button type="button" className="modal-close" onClick={onClose}>Ã—</button><span className="section-kicker">REVIEW TURF REGISTRATION</span><h2>FINAL CHECK</h2><div className="review-grid"><ReviewItem label="Owner Name" value={form.ownerName} /><ReviewItem label="Mobile" value={form.ownerMobile} /><ReviewItem label="Email" value={form.ownerEmail} /><ReviewItem label="Owner Address" value={`${form.ownerHouse}, ${form.ownerStreet}, ${form.ownerCity}, ${form.ownerState}`} /><ReviewItem label="Turf Name" value={form.turfName} /><ReviewItem label="Description" value={form.turfDescription} /><ReviewItem label="Sport(s)" value={form.sports.join(' â€¢ ')} /><ReviewItem label="Facilities" value={form.facilities.join(' â€¢ ')} /><ReviewItem label="Opening Hours" value={formatOpeningHours(form.openingHours)} /><ReviewItem label="Turf Address" value={`${form.turfHouse}, ${form.turfStreet}, ${form.turfArea || form.turfCity}, ${form.turfCity}`} /><ReviewItem label="Contact" value={form.contactNumber || form.ownerMobile} /><ReviewItem label="Primary Image" value={form.primaryImage ? 'Uploaded' : 'Not uploaded'} /></div><div className="review-actions"><button type="button" className="btn btn-secondary" onClick={onClose}>Edit</button><button type="button" className="btn btn-primary" onClick={onConfirm}>Register Turf</button></div></section></div>;
 }
 
 function TurfRegistrationSuccess() {
@@ -615,7 +643,7 @@ function TurfRegistrationSuccess() {
   const registeredTurfs = getDemoState().registeredTurfs || [];
   const turf = registeredTurfs.find((item) => item.id === turfId) || registeredTurfs[registeredTurfs.length - 1] || null;
 
-  return <div className="player-app registration-page"><GlobalHeader /><main className="registration-main container"><div className="registration-heading"><span className="section-kicker">TURF REGISTRATION</span><h1>TURF REGISTERED SUCCESSFULLY</h1><p>Your turf has been successfully registered.</p></div><section className="form-section"><div className="review-grid"><ReviewItem label="Turf Name" value={turf?.turfName || 'Registered turf'} /><ReviewItem label="Owner" value={turf?.ownerName || 'Owner'} /><ReviewItem label="Turf Login Email" value={turf?.turfEmail || turf?.ownerEmail || 'Not available'} /><ReviewItem label="Location" value={turf?.location || turf?.turfAddress?.city || 'Vadodara'} /><ReviewItem label="Sports" value={turf?.sports?.join(' • ') || 'Cricket'} /><ReviewItem label="Status" value={turf?.registrationStatus || 'Registered'} /></div><p className="form-section-note">Use this Turf Login Email with your owner password to access the Turf Owner Dashboard.</p>{turf && <div style={{ marginTop: '26px' }}><button type="button" className="btn btn-primary" onClick={() => navigate(`/turf-owner/dashboard?turfId=${turf.id}`)}>Open Owner Dashboard</button></div>}</section></main><Footer /></div>;
+  return <div className="player-app registration-page"><GlobalHeader /><main className="registration-main container"><div className="registration-heading"><span className="section-kicker">TURF REGISTRATION</span><h1>TURF REGISTERED SUCCESSFULLY</h1><p>Your turf has been successfully registered.</p></div><section className="form-section"><div className="review-grid"><ReviewItem label="Turf Name" value={turf?.turfName || 'Registered turf'} /><ReviewItem label="Owner" value={turf?.ownerName || 'Owner'} /><ReviewItem label="Turf Login Email" value={turf?.turfEmail || turf?.ownerEmail || 'Not available'} /><ReviewItem label="Location" value={turf?.location || turf?.turfAddress?.city || 'Vadodara'} /><ReviewItem label="Sports" value={turf?.sports?.join(' â€¢ ') || 'Cricket'} /><ReviewItem label="Status" value={turf?.registrationStatus || 'Registered'} /></div><p className="form-section-note">Use this Turf Login Email with your owner password to access the Turf Owner Dashboard.</p>{turf && <div style={{ marginTop: '26px' }}><button type="button" className="btn btn-primary" onClick={() => navigate(`/turf-owner/dashboard?turfId=${turf.id}`)}>Open Owner Dashboard</button></div>}</section></main><Footer /></div>;
 }
 
 function LoginPage({ onLogin }) {
@@ -789,22 +817,36 @@ function PlayerRegistration({ onCreated }) {
   const [errors, setErrors] = useState({});
   const [step, setStep] = useState(1);
   const [review, setReview] = useState(false);
-  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [photoError, setPhotoError] = useState('');
+  const submissionLock = useRef(false);
 
-  const compatibleTurfs = useMemo(() => getAllTurfs().filter((turf) => turf.sports.includes(form.sportId)), [form.sportId]);
+  const compatibleTurfs = useMemo(() => getAllTurfs().filter((turf) => (
+    form.selectedTurfIds.includes(turf.id)
+    || form.sports.some((sportName) => turfSupportsSport(turf, sportName))
+  )), [form.selectedTurfIds, form.sports]);
   const age = calculateAge(form.dob);
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const toggleGame = (sportName) => setForm((current) => {
+    const selected = current.sports.includes(sportName)
+      ? current.sports.filter((name) => name !== sportName)
+      : [...current.sports, sportName];
+    return {
+      ...current,
+      sports: selected,
+      sportIds: selected.map((name) => sports.find((sport) => sport.name === name)?.id).filter(Boolean),
+      sportId: selected[0] || '',
+    };
+  });
+  const toggleTurf = (turfId) => setForm((current) => {
+    const selected = current.selectedTurfIds.includes(turfId)
+      ? current.selectedTurfIds.filter((id) => id !== turfId)
+      : [...current.selectedTurfIds, turfId];
+    return { ...current, selectedTurfIds: selected, selectedTurfId: selected[0] || '' };
+  });
 
-  const handleReviewSubmit = () => {
+  const handleReviewSubmit = async () => {
     setReview(false);
-    setPaymentModalOpen(true);
-  };
-
-  const handlePaymentSubmit = async (mode) => {
-    setPaymentModalOpen(false);
-    const event = { preventDefault: () => {}, skipPayment: true, target: { value: mode } };
-    await submit(event);
+    await submit({ preventDefault: () => {}, skipPayment: true });
   };
 
   const validate = () => {
@@ -818,55 +860,83 @@ function PlayerRegistration({ onCreated }) {
     if (!form.house.trim()) next.house = 'House or flat is required.';
     if (!form.street.trim()) next.street = 'Street or area is required.';
     if (!/^\d{6}$/.test(form.pincode)) next.pincode = 'Enter a valid 6-digit Indian pincode.';
-    if (!form.sportId) next.sportId = 'Please select one sport.';
-    if (!form.selectedTurfId) next.selectedTurfId = 'Please select a compatible turf.';
+    if (!form.sports.length) next.sportId = 'Please select at least one game.';
+    if (!form.selectedTurfIds.length) next.selectedTurfId = 'Please select at least one compatible turf.';
+    const selectedTurfs = form.selectedTurfIds.map((turfId) => getTurf(turfId));
+    const selections = getGameTurfSelections(form.sports, form.selectedTurfIds);
+    if (form.sports.some((sportName) => !sports.some((sport) => sport.name === sportName))) {
+      next.sportId = 'Select games from the available game list.';
+    }
+    if (form.selectedTurfIds.some((turfId, index) => !selectedTurfs[index])) {
+      next.selectedTurfId = 'Select turfs from the available turf list.';
+    } else if (form.sports.length && form.selectedTurfIds.length && (
+      form.sports.some((sportName) => !selections.some((selection) => selection.sportName === sportName))
+      || form.selectedTurfIds.some((turfId) => !selections.some((selection) => selection.turfId === turfId))
+    )) {
+      next.selectedTurfId = 'Each selected game and turf must have a supported combination.';
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
   };
 
   const submit = async (event) => {
     event.preventDefault();
+    if (submissionLock.current) return;
     if (!validate()) {
       setReview(false);
       return;
     }
 
-    if (!event?.skipPayment) {
-      setReview(false);
-      setPaymentModalOpen(true);
-      return;
-    }
+    submissionLock.current = true;
+    try {
+      const selectedGames = [...form.sports];
+      const selectedTurfIds = [...form.selectedTurfIds];
+      const gameTurfSelections = getGameTurfSelections(selectedGames, selectedTurfIds);
 
-    if (!isBackendConfigured()) {
-      const state = getDemoState();
-      if (findDuplicatePlayer(state, form)) {
-        setErrors({ duplicate: 'A player with this name and date of birth is already registered. Please login instead.' });
+      const finalizeLocalRegistration = (state, fallbackResult) => {
+        if (!fallbackResult.ok) {
+          setErrors({ duplicate: fallbackResult.error || 'Unable to register the player.' });
+          return false;
+        }
+
+        recordActivity({
+          state,
+          type: ACTIVITY_TYPES.PLAYER_REGISTERED,
+          actorRole: ROLES.PLAYER,
+          actorName: `${fallbackResult.player.firstName} ${fallbackResult.player.surname}`.trim(),
+          message: `New player registered: ${`${fallbackResult.player.firstName} ${fallbackResult.player.surname}`.trim()}`,
+          targetPath: '/admin/players',
+          meta: { playerId: fallbackResult.player.id },
+        });
+
+        if (!saveDemoState(state)) {
+          setErrors({ duplicate: 'Unable to save your registration. Please try again.' });
+          return false;
+        }
+
+        setSession(fallbackResult.session);
+        applySuccessfulSession(fallbackResult.session, ROLES.PLAYER, fallbackResult.player);
+        onCreated?.(fallbackResult.session);
+        navigate('/player/dashboard');
+        return true;
+      };
+
+      if (!isBackendConfigured()) {
+        const state = getDemoState();
+        const result = createDemoPlayerRegistration(state, {
+          ...form,
+          age,
+          sports: selectedGames,
+          selectedTurfIds,
+          gameTurfSelections,
+          mobile: form.mobile.replace(/\s/g, ''),
+        });
+
+        if (finalizeLocalRegistration(state, result)) {
+          return;
+        }
         return;
       }
-      const duplicateContact = findDuplicateContact(state, form);
-      if (duplicateContact) {
-        setErrors({ duplicate: String(duplicateContact.email || '').toLowerCase() === form.email.trim().toLowerCase() ? 'This email is already registered. Please login instead.' : 'This mobile number is already registered. Please login to continue.' });
-        return;
-      }
-      const player = { id: createId('player'), role: ROLES.PLAYER, ...form, mobile: form.mobile.replace(/\s/g, ''), age, city: 'Vadodara', state: 'Gujarat', createdAt: new Date().toISOString() };
-      state.players.push(player);
-      state.requests.push({ id: createId('request'), type: 'PLAYER_TURF_JOIN', playerId: player.id, turfId: player.selectedTurfId, ownerId: getTurfOwnerId(player.selectedTurfId), sportId: player.sportId, status: 'pending', createdAt: new Date().toISOString(), respondedAt: null });
-      recordActivity({
-        state,
-        type: ACTIVITY_TYPES.PLAYER_REGISTERED,
-        actorRole: ROLES.PLAYER,
-        actorName: `${player.firstName} ${player.surname}`.trim(),
-        message: `New player registered: ${`${player.firstName} ${player.surname}`.trim()}`,
-        targetPath: '/admin/players',
-        meta: { playerId: player.id },
-      });
-      saveDemoState(state);
-      const nextSession = { userId: player.id, role: ROLES.PLAYER, email: player.email, issuedAt: new Date().toISOString() };
-      setSession(nextSession);
-      onCreated(nextSession);
-      navigate('/player/dashboard');
-      return;
-    }
 
     try {
       const payload = {
@@ -882,13 +952,30 @@ function PlayerRegistration({ onCreated }) {
         street: form.street.trim(),
         landmark: form.landmark.trim(),
         pincode: form.pincode,
-        sportId: form.sportId,
-        selectedTurfId: form.selectedTurfId,
+        sportId: selectedGames[0],
+        sports: selectedGames,
+        games: selectedGames,
+        sportIds: selectedGames.map((name) => sports.find((sport) => sport.name === name)?.id).filter(Boolean),
+        selectedTurfId: selectedTurfIds[0],
+        selectedTurfIds,
+        gameTurfSelections,
         profileImage: form.profileImage || '',
       };
 
       const result = await apiRequest(payload);
       if (!result?.success) {
+        const fallbackState = getDemoState();
+        const fallback = createDemoPlayerRegistration(fallbackState, {
+          ...form,
+          age,
+          sports: selectedGames,
+          selectedTurfIds,
+          gameTurfSelections,
+          mobile: form.mobile.replace(/\s/g, ''),
+        });
+        if (finalizeLocalRegistration(fallbackState, fallback)) {
+          return;
+        }
         setErrors({ duplicate: result?.message || 'Unable to register the player.' });
         return;
       }
@@ -920,25 +1007,30 @@ function PlayerRegistration({ onCreated }) {
         city: profile?.city || 'Vadodara',
         state: profile?.state || 'Gujarat',
         pincode: profile?.pincode || form.pincode,
-        sportId: profile?.sportId || form.sportId,
-        selectedTurfId: profile?.selectedTurfId || form.selectedTurfId,
+        sports: selectedGames,
+        games: selectedGames,
+        sportIds: selectedGames.map((name) => sports.find((sport) => sport.name === name)?.id).filter(Boolean),
+        sportId: selectedGames[0],
+        selectedTurfIds,
+        selectedTurfId: selectedTurfIds[0],
+        gameTurfSelections,
         profileImage: profile?.profileImage || form.profileImage || '',
         createdAt: profile?.createdAt || new Date().toISOString(),
       };
 
       const nextState = getDemoState();
       nextState.players.push(player);
-      nextState.requests.push({
+      nextState.requests.push(...gameTurfSelections.map((selection) => ({
         id: createId('request'),
         type: 'PLAYER_TURF_JOIN',
         playerId: player.id,
-        turfId: player.selectedTurfId,
-        ownerId: getTurfOwnerId(player.selectedTurfId),
-        sportId: player.sportId,
+        turfId: selection.turfId,
+        ownerId: getTurfOwnerId(selection.turfId),
+        sportId: selection.sportName,
         status: 'pending',
         createdAt: new Date().toISOString(),
         respondedAt: null,
-      });
+      })));
       recordActivity({
         state: nextState,
         type: ACTIVITY_TYPES.PLAYER_REGISTERED,
@@ -948,7 +1040,10 @@ function PlayerRegistration({ onCreated }) {
         targetPath: '/admin/players',
         meta: { playerId: player.id },
       });
-      saveDemoState(nextState);
+      if (!saveDemoState(nextState)) {
+        setErrors({ duplicate: 'Unable to save your registration. Please try again.' });
+        return;
+      }
 
       const nextSession = {
         userId: player.id,
@@ -962,27 +1057,22 @@ function PlayerRegistration({ onCreated }) {
       onCreated(nextSession);
       navigate('/player/dashboard');
     } catch (error) {
-      // Keep onboarding usable when Apps Script is unavailable or blocked by CORS.
-      const state = getDemoState();
-      if (findDuplicatePlayer(state, form)) {
-        setErrors({ duplicate: 'A player with this name and date of birth is already registered. Please login instead.' });
+      const fallbackState = getDemoState();
+      const fallback = createDemoPlayerRegistration(fallbackState, {
+        ...form,
+        age,
+        sports: selectedGames,
+        selectedTurfIds,
+        gameTurfSelections,
+        mobile: form.mobile.replace(/\s/g, ''),
+      });
+      if (finalizeLocalRegistration(fallbackState, fallback)) {
         return;
       }
-      const duplicateContact = findDuplicateContact(state, { ...form, mobile: form.mobile.replace(/\s/g, '') });
-      if (duplicateContact) {
-        setErrors({ duplicate: String(duplicateContact.email || '').toLowerCase() === form.email.trim().toLowerCase() ? 'This email is already registered. Please login instead.' : 'This mobile number is already registered. Please login to continue.' });
-        return;
-      }
-      const player = { id: createId('player'), role: ROLES.PLAYER, ...form, email: form.email.trim().toLowerCase(), mobile: form.mobile.replace(/\s/g, ''), age, city: 'Vadodara', state: 'Gujarat', createdAt: new Date().toISOString() };
-      state.players.push(player);
-      state.requests.push({ id: createId('request'), type: 'PLAYER_TURF_JOIN', playerId: player.id, turfId: player.selectedTurfId, ownerId: getTurfOwnerId(player.selectedTurfId), sportId: player.sportId, status: 'pending', createdAt: new Date().toISOString(), respondedAt: null });
-      recordActivity({ state, type: ACTIVITY_TYPES.PLAYER_REGISTERED, actorRole: ROLES.PLAYER, actorName: `${player.firstName} ${player.surname}`.trim(), message: `New player registered: ${`${player.firstName} ${player.surname}`.trim()}`, targetPath: '/admin/players', meta: { playerId: player.id } });
-      saveDemoState(state);
-      const nextSession = { userId: player.id, role: ROLES.PLAYER, email: player.email, issuedAt: new Date().toISOString() };
-      applySuccessfulSession(nextSession, ROLES.PLAYER, player);
-      setSession(nextSession);
-      onCreated(nextSession);
-      navigate('/player/dashboard');
+      setErrors({ duplicate: error?.message || fallback?.error || 'Unable to register the player. Please try again.' });
+    }
+    } finally {
+      submissionLock.current = false;
     }
   };
 
@@ -997,12 +1087,44 @@ function PlayerRegistration({ onCreated }) {
     }
   };
 
-  return <div className="player-app registration-page"><GlobalHeader /><main className="registration-main container"><div className="registration-heading"><span className="section-kicker">PLAYER REGISTRATION</span><h1>CREATE YOUR PLAYER PROFILE.</h1><p>Tell us a little about yourself and choose the sport you want to play.</p></div><div className="registration-progress">{['Personal', 'Contact', 'Address', 'Sport & Turf', 'Review'].map((label, index) => <span className={step >= index + 1 ? 'active' : ''} key={label}><b>0{index + 1}</b>{label}</span>)}</div><form className="registration-form" onSubmit={submit}><section className="form-section"><FormSectionTitle number="01" title="Personal Information" /><div className="form-grid two"><Field label="First Name" value={form.firstName} onChange={(value) => update('firstName', value)} placeholder="Enter your first name" error={errors.firstName} required /><Field label="Surname" value={form.surname} onChange={(value) => update('surname', value)} placeholder="Enter your surname" error={errors.surname} required /><Field label="Date of Birth" type="date" value={form.dob} onChange={(value) => update('dob', value)} error={errors.dob} required /><Field label="Age" value={age ? `${age} years` : 'Calculated from date of birth'} readOnly /></div></section><section className="form-section"><FormSectionTitle number="02" title="Contact & Address" /><div className="form-grid two"><Field label="Mobile Number" value={form.mobile} onChange={(value) => update('mobile', value)} placeholder="98765 43210" error={errors.mobile} required /><Field label="Email Address" type="email" value={form.email} onChange={(value) => update('email', value)} placeholder="you@example.com" error={errors.email} required /><Field label="Demo Password" type="password" value={form.password} onChange={(value) => update('password', value)} placeholder="At least 6 characters" error={errors.password} required /><Field label="House / Flat / Building" value={form.house} onChange={(value) => update('house', value)} placeholder="House, flat or building" error={errors.house} required /><Field label="Street / Area" value={form.street} onChange={(value) => update('street', value)} placeholder="Street or area" error={errors.street} required /><Field label="Landmark" value={form.landmark} onChange={(value) => update('landmark', value)} placeholder="Optional landmark" /><Field label="City" value="Vadodara" readOnly /><Field label="State" value="Gujarat" readOnly /><Field label="Pincode" value={form.pincode} onChange={(value) => update('pincode', value.replace(/\D/g, '').slice(0, 6))} placeholder="390001" error={errors.pincode} required /></div></section><section className="form-section"><FormSectionTitle number="03" title="Choose Your Sport" /><div className="sport-choice-grid">{sports.map((sport) => <button type="button" className={`sport-choice ${form.sportId === sport.name ? 'selected' : ''}`} key={sport.id} onClick={() => { update('sportId', sport.name); update('selectedTurfId', ''); }}><span>{sport.icon}</span><strong>{sport.name}</strong>{form.sportId === sport.name && <i>Selected</i>}</button>)}</div>{errors.sportId && <InlineError>{errors.sportId}</InlineError>}</section><section className="form-section"><FormSectionTitle number="04" title="Select Your Preferred Turf" /><p className="form-section-note">Only Vadodara turfs supporting {form.sportId || 'your selected sport'} are shown.</p>{form.sportId ? <div className="registration-turf-grid">{compatibleTurfs.map((turf) => <TurfCard turf={turf} selected={form.selectedTurfId === turf.id} onSelect={() => update('selectedTurfId', turf.id)} key={turf.id} selectLabel="Select Turf" />)}</div> : <div className="form-empty">Choose one sport to see compatible Vadodara turfs.</div>}{errors.selectedTurfId && <InlineError>{errors.selectedTurfId}</InlineError>}</section><section className="form-section"><FormSectionTitle number="05" title="Profile Photo" /><div className="photo-upload"><div className="photo-preview">{form.profileImage ? <img src={form.profileImage} alt="Player preview" /> : <span>VS</span>}</div><div><label className="upload-button btn btn-secondary">{form.profileImage ? 'Change Photo' : 'Upload Profile Photo'}<input type="file" accept="image/*" onChange={handlePhoto} /></label>{form.profileImage && <button type="button" className="text-button danger" onClick={() => update('profileImage', '')}>Remove photo</button>}<p>JPG, PNG, WEBP or GIF. Optional.</p>{photoError && <InlineError>{photoError}</InlineError>}</div></div></section>{errors.duplicate && <div className="form-alert">{errors.duplicate}</div>}<div className="registration-actions"><button type="button" className="btn btn-secondary" onClick={() => navigate('/signup')}>Back</button><button type="button" className="btn btn-primary" onClick={() => { if (validate()) { setReview(true); setStep(5); } }}>Review Your Details</button></div></form>{review && <ReviewModal form={form} age={age} onClose={() => setReview(false)} onSubmit={handleReviewSubmit} />}{paymentModalOpen && <PaymentModal onPaid={() => handlePaymentSubmit('paid')} onPayLater={() => handlePaymentSubmit('pay-later')} onClose={() => setPaymentModalOpen(false)} />}</main><Footer /></div>;
+  return (
+    <div className="player-app registration-page">
+      <GlobalHeader />
+      <main className="registration-main container">
+        <div className="registration-heading"><span className="section-kicker">PLAYER REGISTRATION</span><h1>CREATE YOUR PLAYER PROFILE.</h1><p>Tell us a little about yourself and choose the sport you want to play.</p></div>
+        <div className="registration-progress">{['Personal', 'Contact', 'Address', 'Sport & Turf', 'Review'].map((label, index) => <span className={step >= index + 1 ? 'active' : ''} key={label}><b>0{index + 1}</b>{label}</span>)}</div>
+        <form className="registration-form" onSubmit={submit}>
+          <section className="form-section"><FormSectionTitle number="01" title="Personal Information" /><div className="form-grid two"><Field label="First Name" value={form.firstName} onChange={(value) => update('firstName', value)} placeholder="Enter your first name" error={errors.firstName} required /><Field label="Surname" value={form.surname} onChange={(value) => update('surname', value)} placeholder="Enter your surname" error={errors.surname} required /><Field label="Date of Birth" type="date" value={form.dob} onChange={(value) => update('dob', value)} error={errors.dob} required /><Field label="Age" value={age ? `${age} years` : 'Calculated from date of birth'} readOnly /></div></section>
+          <section className="form-section"><FormSectionTitle number="02" title="Contact & Address" /><div className="form-grid two"><Field label="Mobile Number" value={form.mobile} onChange={(value) => update('mobile', value)} placeholder="98765 43210" error={errors.mobile} required /><Field label="Email Address" type="email" value={form.email} onChange={(value) => update('email', value)} placeholder="you@example.com" error={errors.email} required /><Field label="Demo Password" type="password" value={form.password} onChange={(value) => update('password', value)} placeholder="At least 6 characters" error={errors.password} required /><Field label="House / Flat / Building" value={form.house} onChange={(value) => update('house', value)} placeholder="House, flat or building" error={errors.house} required /><Field label="Street / Area" value={form.street} onChange={(value) => update('street', value)} placeholder="Street or area" error={errors.street} required /><Field label="Landmark" value={form.landmark} onChange={(value) => update('landmark', value)} placeholder="Optional landmark" /><Field label="City" value="Vadodara" readOnly /><Field label="State" value="Gujarat" readOnly /><Field label="Pincode" value={form.pincode} onChange={(value) => update('pincode', value.replace(/\D/g, '').slice(0, 6))} placeholder="390001" error={errors.pincode} required /></div></section>
+          <section className="form-section">
+            <FormSectionTitle number="03" title="Choose Your Sport" />
+            <div className="sport-choice-grid">{sports.map((sport) => {
+              const selected = form.sports.includes(sport.name);
+              return <button type="button" className={`sport-choice ${selected ? 'selected' : ''}`} key={sport.id} aria-pressed={selected} onClick={() => toggleGame(sport.name)}><span>{sport.icon}</span><strong>{sport.name}</strong>{selected && <i>Selected</i>}</button>;
+            })}</div>
+            {errors.sportId && <InlineError>{errors.sportId}</InlineError>}
+          </section>
+          <section className="form-section">
+            <FormSectionTitle number="04" title="Select Your Preferred Turfs" />
+            <p className="form-section-note">Turfs compatible with at least one selected game{form.sports.length ? `: ${form.sports.join(', ')}` : ''} are shown.</p>
+            {form.sports.length ? <div className="registration-turf-grid">{compatibleTurfs.map((turf) => <TurfCard turf={turf} selected={form.selectedTurfIds.includes(turf.id)} onSelect={() => toggleTurf(turf.id)} key={turf.id} selectLabel="Select Turf" />)}</div> : <div className="form-empty">Choose one or more games to see compatible Vadodara turfs.</div>}
+            {errors.selectedTurfId && <InlineError>{errors.selectedTurfId}</InlineError>}
+          </section>
+          <section className="form-section"><FormSectionTitle number="05" title="Profile Photo" /><div className="photo-upload"><div className="photo-preview">{form.profileImage ? <img src={form.profileImage} alt="Player preview" /> : <span>VS</span>}</div><div><label className="upload-button btn btn-secondary">{form.profileImage ? 'Change Photo' : 'Upload Profile Photo'}<input type="file" accept="image/*" onChange={handlePhoto} /></label>{form.profileImage && <button type="button" className="text-button danger" onClick={() => update('profileImage', '')}>Remove photo</button>}<p>JPG, PNG, WEBP or GIF. Optional.</p>{photoError && <InlineError>{photoError}</InlineError>}</div></div></section>
+          {errors.duplicate && <div className="form-alert">{errors.duplicate}</div>}
+          <div className="registration-actions"><button type="button" className="btn btn-secondary" onClick={() => navigate('/signup')}>Back</button><button type="button" className="btn btn-primary" onClick={() => { if (validate()) { setReview(true); setStep(5); } }}>Review Your Details</button></div>
+        </form>
+        {review && <ReviewModal form={form} age={age} onClose={() => setReview(false)} onSubmit={handleReviewSubmit} />}
+      </main>
+      <Footer />
+    </div>
+  );
 }
 
 function ReviewModal({ form, age, onClose, onSubmit }) {
-  const turf = getTurf(form.selectedTurfId);
-  return <div className="review-modal-backdrop"><section className="review-modal"><button type="button" className="modal-close" onClick={onClose}>×</button><span className="section-kicker">FINAL CHECK</span><h2>REVIEW YOUR DETAILS.</h2><div className="review-grid"><ReviewItem label="Player" value={`${form.firstName} ${form.surname}`} /><ReviewItem label="Date of Birth" value={formatDate(form.dob)} /><ReviewItem label="Age" value={`${age} years`} /><ReviewItem label="Sport" value={form.sportId} /><ReviewItem label="Mobile" value={form.mobile} /><ReviewItem label="Email" value={form.email} /><ReviewItem label="Address" value={`${form.house}, ${form.street}, Vadodara`} /><ReviewItem label="Selected Turf" value={`${turf?.name || ''} · ${turf?.area || ''}`} /></div><div className="review-actions"><button type="button" className="btn btn-secondary" onClick={onClose}>Edit Details</button><button type="button" className="btn btn-primary" onClick={onSubmit}>Create Player Profile</button></div></section></div>;
+  const selectedGames = getPlayerGames(form);
+  const selectedTurfs = getPlayerTurfIds(form).map((turfId) => getTurf(turfId)).filter(Boolean);
+  return <div className="review-modal-backdrop"><section className="review-modal"><button type="button" className="modal-close" onClick={onClose}>×</button><span className="section-kicker">FINAL CHECK</span><h2>REVIEW YOUR DETAILS.</h2><div className="review-grid"><ReviewItem label="Player" value={`${form.firstName} ${form.surname}`} /><ReviewItem label="Date of Birth" value={formatDate(form.dob)} /><ReviewItem label="Age" value={`${age} years`} /><ReviewItem label="Games" value={selectedGames.join(', ')} /><ReviewItem label="Mobile" value={form.mobile} /><ReviewItem label="Email" value={form.email} /><ReviewItem label="Address" value={`${form.house}, ${form.street}, Vadodara`} /><ReviewItem label="Selected Turfs" value={selectedTurfs.map((turf) => turf.name).join(', ')} /></div><div className="review-actions"><button type="button" className="btn btn-secondary" onClick={onClose}>Edit Details</button><button type="button" className="btn btn-primary" onClick={onSubmit}>Create Player Profile</button></div></section></div>;
 }
 
 function PaymentModal({ onPaid, onPayLater, onClose }) {
@@ -1010,38 +1132,47 @@ function PaymentModal({ onPaid, onPayLater, onClose }) {
 }
 
 function PlayerDashboard({ state, session, refresh, logout }) {
-  const player = resolvePlayerForSession(state, session);
+  const storedPlayer = resolvePlayerForSession(state, session);
   const [turfQuery, setTurfQuery] = useState('');
-  if (!player) return <ProtectedMessage role="player" />;
+  if (!storedPlayer) return <ProtectedMessage role="player" />;
+  const selectedGames = getPlayerGames(storedPlayer);
+  const selectedTurfIds = getPlayerTurfIds(storedPlayer);
+  const player = { ...storedPlayer, sportId: selectedGames.join(', ') || storedPlayer.sportId };
   const playerRequests = state.requests.filter((request) => request.playerId === player.id).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const currentRequest = playerRequests[0];
   const playerBookings = getBookings().filter((booking) => booking.userId === player.id || booking.email === player.email).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-  const selectedTurf = getTurf(player.selectedTurfId);
-  const matches = state.matches.filter((match) => match.sportId === player.sportId);
-  const playerTournaments = tournaments.filter((tournament) => tournament.sport === player.sportId);
-  const compatibleTurfs = getAllTurfs().filter((turf) => (turf.sports || []).includes(player.sportId) && [turf.name, turf.area].some((value) => String(value || '').toLowerCase().includes(turfQuery.toLowerCase())));
+  const selectedTurfs = selectedTurfIds.map((turfId) => getTurf(turfId)).filter(Boolean);
+  const selectedTurf = selectedTurfs.length ? {
+    name: selectedTurfs.map((turf) => turf.name).join(', '),
+    area: [...new Set(selectedTurfs.map((turf) => turf.area).filter(Boolean))].join(', '),
+  } : null;
+  const matches = state.matches.filter((match) => selectedGames.includes(match.sportId));
+  const playerTournaments = getAllTournaments().filter((tournament) => selectedGames.includes(tournament.sport));
+  const compatibleTurfs = getAllTurfs().filter((turf) => (turf.sports || []).some((sportName) => selectedGames.includes(sportName)) && [turf.name, turf.area].some((value) => String(value || '').toLowerCase().includes(turfQuery.toLowerCase())));
 
   const sendRequest = (turf) => {
-    if (turf.id === player.selectedTurfId && currentRequest?.status === 'pending') return;
+    if (selectedTurfIds.includes(turf.id) && currentRequest?.status === 'pending') return;
     if (currentRequest?.status === 'accepted' && !window.confirm('You are already connected with this turf. Do you want to change your preferred turf?')) return;
     const nextState = getDemoState();
     const oldPending = nextState.requests.find((request) => request.id === currentRequest?.id && request.status === 'pending');
     if (oldPending) oldPending.status = 'cancelled';
     const nextPlayer = nextState.players.find((item) => item.id === player.id);
-    nextPlayer.selectedTurfId = turf.id;
-    nextState.requests.push({ id: createId('request'), type: 'PLAYER_TURF_JOIN', playerId: player.id, turfId: turf.id, ownerId: getTurfOwnerId(turf.id), sportId: player.sportId, status: 'pending', createdAt: new Date().toISOString(), respondedAt: null });
+    nextPlayer.selectedTurfIds = [...new Set([...getPlayerTurfIds(nextPlayer), turf.id])];
+    nextPlayer.selectedTurfId = nextPlayer.selectedTurfIds[0];
+    nextState.requests.push(...selectedGames.filter((sportName) => turfSupportsSport(turf, sportName)).map((sportName) => ({ id: createId('request'), type: 'PLAYER_TURF_JOIN', playerId: player.id, turfId: turf.id, ownerId: getTurfOwnerId(turf.id), sportId: sportName, status: 'pending', createdAt: new Date().toISOString(), respondedAt: null })));
     saveDemoState(nextState);
     refresh();
     document.querySelector('#my-turf-request')?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  return <PlayerShell player={player} active="Dashboard" logout={logout}><main className="dashboard-main container"><section className="dashboard-welcome"><div><span className="section-kicker">PLAYER HOME / VADODARA</span><h1>Welcome back, {player.firstName}.</h1><p>Ready for your next game?</p></div><img className="dashboard-avatar" src={player.profileImage || ''} alt={player.profileImage ? `${player.firstName} profile` : ''} onError={(event) => { event.currentTarget.style.display = 'none'; }} />{!player.profileImage && <span className="dashboard-avatar fallback">{player.firstName.slice(0, 1)}{player.surname.slice(0, 1)}</span>}</section><section className="dashboard-summary-grid"><article className="player-summary-card"><div className="summary-profile"><span className="large-avatar">{player.firstName.slice(0, 1)}{player.surname.slice(0, 1)}</span><div><h2>{player.firstName} {player.surname}</h2><p>{player.sportId} Player · {player.age} Years</p><span>Vadodara</span></div></div><div className="summary-turf"><span className="section-kicker">SELECTED TURF</span><strong>{selectedTurf?.name || 'Not Selected'}</strong><span>{selectedTurf?.area || 'Choose a turf'}{selectedTurf ? ', Vadodara' : ''}</span></div><div className="summary-request"><span className="section-kicker">REQUEST</span><StatusPill status={currentRequest?.status || 'not selected'} /></div><button type="button" className="link-button" onClick={() => navigate('/player/profile')}>View Profile</button></article><RequestCard request={currentRequest} /></section><section className="dashboard-columns"><section className="dashboard-block"><SectionHeading kicker="UPCOMING MATCHES" title="YOUR NEXT GAMES." /><div className="match-list">{matches.filter((match) => match.status === 'upcoming').length ? matches.filter((match) => match.status === 'upcoming').map((match) => <MatchCard key={match.id} match={match} />) : <EmptyState title="No upcoming matches" text="Your next match will appear here." />}</div></section><section className="dashboard-block"><SectionHeading kicker="LIVE NOW" title="YOUR SPORT, RIGHT NOW." /><div className="match-list">{matches.filter((match) => match.status === 'live').length ? matches.filter((match) => match.status === 'live').map((match) => <MatchCard key={match.id} match={match} />) : <EmptyState title="No live matches right now" text="Your next match will appear here when available." />}</div></section></section><section className="dashboard-block"><SectionHeading kicker={`${player.sportId.toUpperCase()} TOURNAMENTS`} title="OPPORTUNITIES TO COMPETE." /><div className="mini-tournament-grid">{playerTournaments.length ? playerTournaments.map((tournament) => <article className="mini-tournament" key={tournament.id}><img src={tournament.image} alt={`${tournament.sport} tournament`} /><div><span className="section-kicker">{tournament.sport}</span><h3>{tournament.name}</h3><p>{tournament.dateLabel} · {tournament.venueName}</p><button type="button" className="link-button" onClick={() => navigate(`/tournaments/${tournament.id}`)}>View Tournament</button></div></article>) : <EmptyState title="No upcoming tournaments for your selected sport." text="Choose another sport from your profile when your game changes." />}</div></section><section className="dashboard-block" id="find-turf"><div className="find-turf-heading"><SectionHeading kicker="VADODARA TURFS" title="FIND YOUR TURF." /><input className="dashboard-search" value={turfQuery} onChange={(event) => setTurfQuery(event.target.value)} placeholder="Search turf or area..." aria-label="Search turf" /></div><p className="dashboard-subtitle">Showing turfs compatible with {player.sportId}.</p><div className="dashboard-turf-grid">{compatibleTurfs.map((turf) => <TurfCard key={turf.id} turf={turf} selected={turf.id === player.selectedTurfId} requestStatus={playerRequests.find((request) => request.turfId === turf.id)?.status} onSelect={() => sendRequest(turf)} selectLabel={turf.id === player.selectedTurfId ? 'Current Turf' : 'Send Joining Request'} />)}</div></section><section className="dashboard-block request-history"><SectionHeading kicker="MY TURF REQUEST" title="REQUEST HISTORY." />{playerRequests.length ? playerRequests.map((request) => <RequestHistoryItem key={request.id} request={request} />) : <EmptyState title="Choose a turf to send your first joining request." text="Your request history will appear here." />}</section></main></PlayerShell>;
+  return <PlayerShell player={player} active="Dashboard" logout={logout}><main className="dashboard-main container"><section className="dashboard-welcome"><div><span className="section-kicker">PLAYER HOME / VADODARA</span><h1>Welcome back, {player.firstName}.</h1><p>Ready for your next game?</p></div><img className="dashboard-avatar" src={player.profileImage || ''} alt={player.profileImage ? `${player.firstName} profile` : ''} onError={(event) => { event.currentTarget.style.display = 'none'; }} />{!player.profileImage && <span className="dashboard-avatar fallback">{player.firstName.slice(0, 1)}{player.surname.slice(0, 1)}</span>}</section><section className="dashboard-summary-grid"><article className="player-summary-card"><div className="summary-profile"><span className="large-avatar">{player.firstName.slice(0, 1)}{player.surname.slice(0, 1)}</span><div><h2>{player.firstName} {player.surname}</h2><p>{player.sportId} Player Â· {player.age} Years</p><span>Vadodara</span></div></div><div className="summary-turf"><span className="section-kicker">SELECTED TURF</span><strong>{selectedTurf?.name || 'Not Selected'}</strong><span>{selectedTurf?.area || 'Choose a turf'}{selectedTurf ? ', Vadodara' : ''}</span></div><div className="summary-request"><span className="section-kicker">REQUEST</span><StatusPill status={currentRequest?.status || 'not selected'} /></div><button type="button" className="link-button" onClick={() => navigate('/player/profile')}>View Profile</button></article><RequestCard request={currentRequest} /></section><section className="dashboard-columns"><section className="dashboard-block"><SectionHeading kicker="UPCOMING MATCHES" title="YOUR NEXT GAMES." /><div className="match-list">{matches.filter((match) => match.status === 'upcoming').length ? matches.filter((match) => match.status === 'upcoming').map((match) => <MatchCard key={match.id} match={match} />) : <EmptyState title="No upcoming matches" text="Your next match will appear here." />}</div></section><section className="dashboard-block"><SectionHeading kicker="LIVE NOW" title="YOUR SPORT, RIGHT NOW." /><div className="match-list">{matches.filter((match) => match.status === 'live').length ? matches.filter((match) => match.status === 'live').map((match) => <MatchCard key={match.id} match={match} />) : <EmptyState title="No live matches right now" text="Your next match will appear here when available." />}</div></section></section><section className="dashboard-block"><SectionHeading kicker={`${player.sportId.toUpperCase()} TOURNAMENTS`} title="OPPORTUNITIES TO COMPETE." /><div className="mini-tournament-grid">{playerTournaments.length ? playerTournaments.map((tournament) => <article className="mini-tournament" key={tournament.id}><img src={tournament.image} alt={`${tournament.sport} tournament`} /><div><span className="section-kicker">{tournament.sport}</span><h3>{tournament.name}</h3><p>{tournament.dateLabel} Â· {tournament.venueName}</p><button type="button" className="link-button" onClick={() => navigate(`/tournaments/${tournament.id}`)}>View Tournament</button></div></article>) : <EmptyState title="No upcoming tournaments for your selected sport." text="Choose another sport from your profile when your game changes." />}</div></section><section className="dashboard-block" id="find-turf"><div className="find-turf-heading"><SectionHeading kicker="VADODARA TURFS" title="FIND YOUR TURF." /><input className="dashboard-search" value={turfQuery} onChange={(event) => setTurfQuery(event.target.value)} placeholder="Search turf or area..." aria-label="Search turf" /></div><p className="dashboard-subtitle">Showing turfs compatible with {player.sportId}.</p><div className="dashboard-turf-grid">{compatibleTurfs.map((turf) => <TurfCard key={turf.id} turf={turf} selected={turf.id === player.selectedTurfId} requestStatus={playerRequests.find((request) => request.turfId === turf.id)?.status} onSelect={() => sendRequest(turf)} selectLabel={turf.id === player.selectedTurfId ? 'Current Turf' : 'Send Joining Request'} />)}</div></section><section className="dashboard-block request-history"><SectionHeading kicker="MY TURF REQUEST" title="REQUEST HISTORY." />{playerRequests.length ? playerRequests.map((request) => <RequestHistoryItem key={request.id} request={request} />) : <EmptyState title="Choose a turf to send your first joining request." text="Your request history will appear here." />}</section></main></PlayerShell>;
 }
 
 function ProfilePage({ state, session, refresh, logout }) {
-  const player = resolvePlayerForSession(state, session);
+  const storedPlayer = resolvePlayerForSession(state, session);
+  const player = storedPlayer ? { ...storedPlayer, sportId: getPlayerGames(storedPlayer).join(', ') || storedPlayer.sportId } : null;
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState(player || {});
+  const [form, setForm] = useState(storedPlayer || {});
   if (!player) return <ProtectedMessage role="player" />;
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const save = () => {
@@ -1056,7 +1187,7 @@ function ProfilePage({ state, session, refresh, logout }) {
 }
 
 function PlayerBookingStatuses({ bookings }) {
-  return <section className="dashboard-block player-bookings"><SectionHeading kicker="MY BOOKINGS" title="YOUR TURF RESERVATIONS." />{bookings.length ? <div className="owner-record-list">{bookings.map((booking) => <article className="owner-record" key={booking.bookingId}><div><h3>{booking.turfName}</h3><p>{booking.game} · {formatDate(booking.bookingDate)} · {booking.fromTime} to {booking.toTime}</p><small>{booking.bookingId}</small></div><StatusPill status={booking.bookingStatus} /></article>)}</div> : <EmptyState title="No bookings yet" text="Your turf reservations will appear here." />}</section>;
+  return <section className="dashboard-block player-bookings"><SectionHeading kicker="MY BOOKINGS" title="YOUR TURF RESERVATIONS." />{bookings.length ? <div className="owner-record-list">{bookings.map((booking) => <article className="owner-record" key={booking.bookingId}><div><h3>{booking.turfName}</h3><p>{booking.game} Â· {formatDate(booking.bookingDate)} Â· {booking.fromTime} to {booking.toTime}</p><small>{booking.bookingId}</small></div><StatusPill status={booking.bookingStatus} /></article>)}</div> : <EmptyState title="No bookings yet" text="Your turf reservations will appear here." />}</section>;
 }
 
 function OwnerDashboard({ state, session, refresh, logout }) {
@@ -1073,44 +1204,51 @@ function OwnerDashboard({ state, session, refresh, logout }) {
     refresh();
   };
   if (!owner || !ownerTurf) return <ProtectedMessage role="turf owner" />;
-  return <div className="player-app owner-page"><AppTopbar label="TURF OWNER WORKSPACE" onLogout={logout} /><main className="dashboard-main container"><div className="page-title-row"><div><span className="section-kicker">SPECIFIC TURF OWNER</span><h1>{ownerTurf.name}.</h1><p>Review joining requests for {ownerTurf.area}, Vadodara.</p></div><div className="owner-badge">OWNER VIEW</div></div><section className="owner-venue-banner"><img src={ownerTurf.image} alt={ownerTurf.name} /><div><span className="section-kicker">YOUR VENUE</span><h2>{ownerTurf.name}</h2><p>{ownerTurf.area}, Vadodara · {ownerTurf.sports.join(' · ')}</p></div></section><section className="dashboard-block owner-requests"><SectionHeading kicker="PLAYER REQUESTS" title="WHO WANTS TO PLAY HERE." />{requests.length ? requests.map((request) => <OwnerRequest key={request.id} request={request} player={state.players.find((item) => item.id === request.playerId)} turf={ownerTurf} onRespond={respond} />) : <EmptyState title="No joining requests yet" text="Requests for this specific turf will appear here." />}</section></main></div>;
+  return <div className="player-app owner-page"><AppTopbar label="TURF OWNER WORKSPACE" onLogout={logout} /><main className="dashboard-main container"><div className="page-title-row"><div><span className="section-kicker">SPECIFIC TURF OWNER</span><h1>{ownerTurf.name}.</h1><p>Review joining requests for {ownerTurf.area}, Vadodara.</p></div><div className="owner-badge">OWNER VIEW</div></div><section className="owner-venue-banner"><img src={ownerTurf.image} alt={ownerTurf.name} /><div><span className="section-kicker">YOUR VENUE</span><h2>{ownerTurf.name}</h2><p>{ownerTurf.area}, Vadodara Â· {ownerTurf.sports.join(' Â· ')}</p></div></section><section className="dashboard-block owner-requests"><SectionHeading kicker="PLAYER REQUESTS" title="WHO WANTS TO PLAY HERE." />{requests.length ? requests.map((request) => <OwnerRequest key={request.id} request={request} player={state.players.find((item) => item.id === request.playerId)} turf={ownerTurf} onRespond={respond} />) : <EmptyState title="No joining requests yet" text="Requests for this specific turf will appear here." />}</section></main></div>;
 }
 
 function OwnerRequest({ request, player, turf, onRespond }) {
   if (!player) return null;
-  return <article className="owner-request"><div className="large-avatar">{player.firstName.slice(0, 1)}{player.surname.slice(0, 1)}</div><div className="owner-request-main"><span className="section-kicker">PLAYER REQUEST</span><h3>{player.firstName} {player.surname}</h3><p>{player.age} years · {player.sportId} · Registered {new Date(player.createdAt).toLocaleDateString('en-IN')}</p><span>{turf.name} · {turf.area}</span></div><div className="owner-request-actions"><StatusPill status={request.status} />{request.status === 'pending' && <><button type="button" className="btn btn-primary" onClick={() => onRespond(request.id, 'accepted')}>Accept</button><button type="button" className="btn btn-secondary" onClick={() => onRespond(request.id, 'rejected')}>Reject</button></>}</div></article>;
+  return <article className="owner-request"><div className="large-avatar">{player.firstName.slice(0, 1)}{player.surname.slice(0, 1)}</div><div className="owner-request-main"><span className="section-kicker">PLAYER REQUEST</span><h3>{player.firstName} {player.surname}</h3><p>{player.age} years Â· {player.sportId} Â· Registered {new Date(player.createdAt).toLocaleDateString('en-IN')}</p><span>{turf.name} Â· {turf.area}</span></div><div className="owner-request-actions"><StatusPill status={request.status} />{request.status === 'pending' && <><button type="button" className="btn btn-primary" onClick={() => onRespond(request.id, 'accepted')}>Accept</button><button type="button" className="btn btn-secondary" onClick={() => onRespond(request.id, 'rejected')}>Reject</button></>}</div></article>;
 }
 
 function PlayerShell({ player, active, logout, children }) {
   const [open, setOpen] = useState(false);
-  return <div className="player-app dashboard-app"><AppTopbar player={player} onLogout={logout} onMenu={() => setOpen((value) => !value)} /><div className={`dashboard-frame ${open ? 'nav-open' : ''}`}><aside className="dashboard-sidebar"><div className="sidebar-profile"><span className="large-avatar">{player.firstName.slice(0, 1)}{player.surname.slice(0, 1)}</span><strong>{player.firstName} {player.surname}</strong><span>{player.sportId} Player</span></div><nav>{appNav.map((item) => <button type="button" className={active === item.label ? 'active' : ''} onClick={() => navigate(item.href.split('#')[0])} key={item.label}>{item.label}</button>)}</nav><button type="button" className="sidebar-logout" onClick={logout}>Logout</button></aside><div className="dashboard-content">{children}</div></div></div>;
+  return <div className="player-app dashboard-app"><AppTopbar player={player} onLogout={logout} onMenu={() => setOpen((value) => !value)} /><div className={`dashboard-frame ${open ? 'nav-open' : ''}`}><aside className="dashboard-sidebar"><div className="sidebar-profile"><span className="large-avatar">{player.firstName.slice(0, 1)}{player.surname.slice(0, 1)}</span><strong>{player.firstName} {player.surname}</strong><span>{player.sportId} Player</span></div><nav>{appNav.map((item) => <button type="button" className={active === item.label ? 'active' : ''} onClick={() => navigate(item.href.split('#')[0])} key={item.label}>{item.label}</button>)}</nav><button type="button" className="sidebar-logout" onClick={logout}>Logout</button></aside><div className="dashboard-content">{children}{active === 'Dashboard' && <TournamentRegistrationHistory playerId={player.id} />}</div></div></div>;
+}
+
+function TournamentRegistrationHistory({ playerId }) {
+  const tournamentsById = new Map(getAllTournaments().map((tournament) => [tournament.id, tournament]));
+  const registrations = getDemoState().registrations.filter((registration) => registration.playerId === playerId);
+
+  return <section className="dashboard-block container"><SectionHeading kicker="TOURNAMENT REGISTRATIONS" title="YOUR TOURNAMENTS." />{registrations.length ? <div className="request-history-list">{registrations.map((registration) => <article className="request-history-item" key={registration.id}><div><strong>{tournamentsById.get(registration.tournamentId)?.name || 'Tournament'}</strong><span>{registration.registrationType || 'Individual'} · ₹{new Intl.NumberFormat('en-IN').format(registration.totalFee || 0)}</span></div><div><small>Payment: {registration.paymentStatus || 'pending'}</small><StatusPill status={registration.status} /></div></article>)}</div> : <EmptyState title="No tournament registrations" text="Register for a tournament from the detail page to see it here." />}</section>;
 }
 
 function AppTopbar({ player, label = 'PLAYER HOME', onLogout, onMenu }) {
-  return <header className="app-topbar dashboard-topbar"><button type="button" className="app-brand" onClick={() => navigate(player ? '/player/dashboard' : '/turf-owner/dashboard')}><span className="brand-mark">VS</span><span>{label}</span></button><div className="dashboard-top-actions">{player && <span className="topbar-user">{player.firstName} {player.surname}</span>}<button type="button" className="mobile-dashboard-menu" onClick={onMenu} aria-label="Toggle dashboard navigation">☰</button><button type="button" className="text-button" onClick={onLogout}>Logout</button></div></header>;
+  return <header className="app-topbar dashboard-topbar"><button type="button" className="app-brand" onClick={() => navigate(player ? '/player/dashboard' : '/turf-owner/dashboard')}><span className="brand-mark">VS</span><span>{label}</span></button><div className="dashboard-top-actions">{player && <span className="topbar-user">{player.firstName} {player.surname}</span>}<button type="button" className="mobile-dashboard-menu" onClick={onMenu} aria-label="Toggle dashboard navigation">â˜°</button><button type="button" className="text-button" onClick={onLogout}>Logout</button></div></header>;
 }
 
 function RequestCard({ request }) {
   const turf = request ? getTurf(request.turfId) : null;
   const bookings = request ? getBookings().filter((booking) => booking.userId === request.playerId || booking.turfId === request.turfId) : [];
-  return <article className="request-card" id="my-turf-request"><span className="section-kicker">MY TURF REQUEST</span><h2>{turf?.name || 'No turf selected'}</h2><p>{turf ? `${turf.area}, Vadodara` : 'Choose a compatible turf to send your first request.'}</p>{request ? <><div className="request-card-row"><span>{request.sportId}</span><StatusPill status={request.status} /></div><small>Request sent {new Date(request.createdAt).toLocaleDateString('en-IN')}</small>{bookings.length > 0 && <div className="player-booking-statuses"><span className="section-kicker">BOOKING STATUS</span>{bookings.slice(0, 2).map((booking) => <div className="request-card-row" key={booking.bookingId}><span>{booking.game} · {formatDate(booking.bookingDate)}</span><StatusPill status={booking.bookingStatus} /></div>)}</div>}</> : <small>Select a turf below to get started.</small>}</article>;
+  return <article className="request-card" id="my-turf-request"><span className="section-kicker">MY TURF REQUEST</span><h2>{turf?.name || 'No turf selected'}</h2><p>{turf ? `${turf.area}, Vadodara` : 'Choose a compatible turf to send your first request.'}</p>{request ? <><div className="request-card-row"><span>{request.sportId}</span><StatusPill status={request.status} /></div><small>Request sent {new Date(request.createdAt).toLocaleDateString('en-IN')}</small>{bookings.length > 0 && <div className="player-booking-statuses"><span className="section-kicker">BOOKING STATUS</span>{bookings.slice(0, 2).map((booking) => <div className="request-card-row" key={booking.bookingId}><span>{booking.game} Â· {formatDate(booking.bookingDate)}</span><StatusPill status={booking.bookingStatus} /></div>)}</div>}</> : <small>Select a turf below to get started.</small>}</article>;
 }
 
 function MatchCard({ match }) {
   const tournament = getTournament(match.tournamentId);
   const turf = getTurf(match.turfId);
-  return <article className={`match-card ${match.status === 'live' ? 'live' : ''}`}><div className="match-card-top"><span className="sport-chip">{match.sportId}</span>{match.status === 'live' ? <StatusPill status="live" /> : <span>{match.date}</span>}</div><h3>{tournament?.name}</h3><div className="match-teams"><strong>{match.teams[0]}</strong><span>VS</span><strong>{match.teams[1]}</strong></div><p>{match.status === 'live' ? match.phase : `${match.time} · ${turf?.name || 'Vadodara'}`}</p></article>;
+  return <article className={`match-card ${match.status === 'live' ? 'live' : ''}`}><div className="match-card-top"><span className="sport-chip">{match.sportId}</span>{match.status === 'live' ? <StatusPill status="live" /> : <span>{match.date}</span>}</div><h3>{tournament?.name}</h3><div className="match-teams"><strong>{match.teams[0]}</strong><span>VS</span><strong>{match.teams[1]}</strong></div><p>{match.status === 'live' ? match.phase : `${match.time} Â· ${turf?.name || 'Vadodara'}`}</p></article>;
 }
 
 function TurfCard({ turf, selected, requestStatus, onSelect, selectLabel }) {
   const disabled = selected && requestStatus === 'pending';
   const selectedLabel = requestStatus === 'accepted' ? 'Approved' : requestStatus === 'rejected' ? 'Request Rejected' : requestStatus === 'pending' ? 'Request Pending' : 'Selected';
-  return <article className={`dashboard-turf-card ${selected ? 'selected' : ''}`}><img src={turf.image} alt={turf.name} loading="lazy" /><div className="dashboard-turf-copy"><h3>{turf.name}</h3><p>{turf.area}, Vadodara</p><span>{turf.sports.join(' · ')}</span><small>{turf.facilities?.slice(0, 2).join(' · ')}{turf.openingHours ? ` · ${turf.openingHours}` : ''}</small><button type="button" className={`btn ${selected ? 'btn-secondary' : 'btn-primary'}`} onClick={onSelect} disabled={disabled}>{selected ? selectedLabel : selectLabel}</button></div></article>;
+  return <article className={`dashboard-turf-card ${selected ? 'selected' : ''}`}><img src={turf.image} alt={turf.name} loading="lazy" /><div className="dashboard-turf-copy"><h3>{turf.name}</h3><p>{turf.area}, Vadodara</p><span>{turf.sports.join(' Â· ')}</span><small>{turf.facilities?.slice(0, 2).join(' Â· ')}{turf.openingHours ? ` Â· ${turf.openingHours}` : ''}</small><button type="button" className={`btn ${selected ? 'btn-secondary' : 'btn-primary'}`} onClick={onSelect} disabled={disabled}>{selected ? selectedLabel : selectLabel}</button></div></article>;
 }
 
 function RequestHistoryItem({ request }) {
   const turf = getTurf(request.turfId);
-  return <article className="request-history-item"><div><strong>{turf?.name}</strong><span>{request.sportId} · {turf?.area}, Vadodara</span></div><div><small>{new Date(request.createdAt).toLocaleDateString('en-IN')}</small><StatusPill status={request.status} /></div></article>;
+  return <article className="request-history-item"><div><strong>{turf?.name}</strong><span>{request.sportId} Â· {turf?.area}, Vadodara</span></div><div><small>{new Date(request.createdAt).toLocaleDateString('en-IN')}</small><StatusPill status={request.status} /></div></article>;
 }
 
 function SectionHeading({ kicker, title }) { return <div className="dashboard-section-heading"><span className="section-kicker">{kicker}</span><h2>{title}</h2></div>; }

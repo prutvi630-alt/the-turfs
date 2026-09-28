@@ -1,3 +1,5 @@
+import logo from './data/Logo.png';
+
 const baseUrl = import.meta.env.BASE_URL;
 const route = (path) => `${baseUrl}${path.replace(/^\//, '')}`;
 
@@ -57,7 +59,7 @@ function Footer() {
     <footer className="site-footer">
       <div className="container footer-grid">
         <div className="footer-brand">
-          <a className="footer-wordmark" href={route('/')} aria-label="CLIFT home">CLIFT</a>
+          <a className="footer-wordmark" href={route('/')} aria-label="CLIFT home"><img src={logo} alt="CLIFT" /></a>
           <p>Building a connected sports community for Vadodara, one game, one venue and one tournament at a time.</p>
           <div className="socials" aria-label="Social links">
             {socialLinks.map((social) => (

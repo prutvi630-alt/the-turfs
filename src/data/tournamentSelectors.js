@@ -1,6 +1,6 @@
-import { getAllTurfs, getDemoState } from './demoStore';
-import { getAllTournaments, tournamentStage } from './dashboardSelectors';
-import { TOURNAMENT_STATUS, isDraft, isPublished } from './adminTournaments';
+import { getAllTurfs, getDemoState } from './demoStore.js';
+import { getAllTournaments, tournamentStage } from './dashboardSelectors.js';
+import { TOURNAMENT_STATUS, isDraft, isPublished } from './adminTournaments.js';
 
 // ---------------------------------------------------------------------------
 // Admin tournament selectors

@@ -1,5 +1,5 @@
-import { tournaments as baseTournaments } from './tournaments';
-import { getAllTurfs, getBookings, getDemoState } from './demoStore';
+import { tournaments as baseTournaments } from './tournaments.js';
+import { getAllTurfs, getBookings, getDemoState } from './demoStore.js';
 
 // ---------------------------------------------------------------------------
 // Dashboard selectors
@@ -38,16 +38,21 @@ export const getAllTournaments = () => {
   const registrations = state.registrations || [];
   return [...baseTournaments, ...created].map((tournament) => {
     const result = state.tournamentResults?.[tournament.id];
-    const approved = registrations.filter((item) => item.tournamentId === tournament.id && item.status === 'approved');
+    const activeRegistrations = registrations.filter((item) => item.tournamentId === tournament.id && ['pending', 'approved'].includes(item.status));
+    const approved = activeRegistrations.filter((item) => item.status === 'approved');
     const withResult = result?.winner ? { ...tournament, status: 'Completed', winner: result.winner, finalResult: result.finalResult } : tournament;
-    if (!approved.length) return withResult;
     const registeredNames = new Set((tournament.teams || []).map((team) => team.name));
     const additionalTeams = approved
       .filter((item) => !registeredNames.has(item.teamName))
       .map((item) => ({ name: item.teamName, captain: item.captain, status: 'Registered' }));
+    const additionalRegistrations = activeRegistrations.filter((item) => !registeredNames.has(item.teamName));
+    const additionalCount = tournament.registrationType === 'Individual'
+      ? additionalRegistrations.reduce((total, item) => total + Math.max(Number(item.participantCount) || item.players?.length || 1, 1), 0)
+      : additionalRegistrations.length;
+    if (!activeRegistrations.length) return withResult;
     return {
       ...withResult,
-      registeredTeams: (tournament.registeredTeams || 0) + additionalTeams.length,
+      registeredTeams: (tournament.registeredTeams || 0) + additionalCount,
       teams: [...(tournament.teams || []), ...additionalTeams],
     };
   });

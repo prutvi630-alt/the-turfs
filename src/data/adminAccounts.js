@@ -1,5 +1,5 @@
-import { getDemoState, saveDemoState } from './demoStore';
-import { ACTIVITY_TYPES, recordActivity } from './activityStore';
+import { getDemoState, saveDemoState } from './demoStore.js';
+import { ACTIVITY_TYPES, recordActivity } from './activityStore.js';
 
 // ---------------------------------------------------------------------------
 // Admin account management

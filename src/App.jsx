@@ -9,7 +9,7 @@ import BookingPage from './BookingPage';
 import GlobalHeader from './GlobalHeader';
 import Footer from './Footer';
 import PlayersPage from './PlayersPage';
-import { route } from './config/routes';
+import { normalizePath, route } from './config/routes';
 
 const formatHeroTitle = (title) => title.split('\n').map((line, index) => <span key={index}>{line}</span>);
 
@@ -39,7 +39,7 @@ const featureItems = [
   },
 ];
 
-const popularSports = ['cricket', 'pickleball', 'football']
+const popularSports = ['cricket', 'football', 'pickleball', 'tennis', 'swimming', 'rifle-pistol-shooting', 'badminton']
   .map((sportId) => sports.find((sport) => sport.id === sportId))
   .filter(Boolean);
 
@@ -51,8 +51,7 @@ const upcomingTournaments = tournaments
     return new Date(`${tournament.date}T00:00:00`) > new Date()
       && !['completed', 'cancelled', 'live'].includes(status);
   })
-  .sort((first, second) => new Date(first.date) - new Date(second.date))
-  .slice(0, 3);
+  .sort((first, second) => new Date(first.date) - new Date(second.date));
 
 const platformStats = [
   { value: turfs.length, label: 'TURFS' },
@@ -126,7 +125,7 @@ function FeatureIcon({ type }) {
 }
 
 function App() {
-  const path = window.location.pathname.replace(/^\/The-Turf-/, '') || '/';
+  const path = normalizePath();
 
   if (path === '/about') {
     return <AboutPage />;
@@ -278,9 +277,9 @@ function App() {
                     <span className="eyebrow">{slide.eyebrow}</span>
                     <h1 className="hero-title">{slide.title}</h1>
                     <div className="hero-tagline" aria-label="Rise play conquer">
-                      <span>{slide.tag.split(' ')[0]}.</span>
-                      <span className="hero-tagline-accent">{slide.tag.split(' ')[1]}.</span>
-                      <span>{slide.tag.split(' ')[2]}.</span>
+                      <span>{slide.tag.split(' ')[0]}</span>
+                      <span className="hero-tagline-accent">{slide.tag.split(' ')[1]}</span>
+                      <span>{slide.tag.split(' ')[2]}</span>
                     </div>
                     <div className="hero-game-label">{slide.gameTitle}</div>
                     <p className="hero-game-subtitle">{slide.gameSubtitle}</p>
@@ -356,23 +355,31 @@ function App() {
             </div>
 
             <div className="sports-grid">
-              {popularSports.map((sport) => (
-                <article key={sport.id} className="sport-card reveal" data-reveal>
-                  <div className="sport-image-wrap">
-                    <img src={sport.image} alt={sport.name} loading="lazy" />
-                  </div>
-                  <div className="sport-card-body">
-                    <div className="sport-header-row">
-                      <span className="sport-badge">{sport.icon}</span>
-                      <h3>{sport.name}</h3>
+              {popularSports.map((sport) => {
+                const isComingSoon = sport.status === 'coming-soon';
+
+                return (
+                  <article key={sport.id} className="sport-card reveal" data-reveal>
+                    <div className="sport-image-wrap">
+                      <img src={sport.image} alt={sport.name} loading="lazy" />
                     </div>
-                    <p>{sport.description}</p>
-                    <button type="button" className="link-button" onClick={() => handleJoin('Join Now')}>
-                      Join Now
-                    </button>
-                  </div>
-                </article>
-              ))}
+                    <div className="sport-card-body">
+                      <div className="sport-header-row">
+                        <span className="sport-badge">{sport.icon}</span>
+                        <h3>{sport.name}</h3>
+                      </div>
+                      <p>{sport.description}</p>
+                      {isComingSoon ? (
+                        <span className="coming-soon-pill">Coming Soon</span>
+                      ) : (
+                        <button type="button" className="link-button" onClick={() => handleJoin('Join Now')}>
+                          Join Now
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </div>
         </section>
@@ -386,7 +393,10 @@ function App() {
 
             <div className="filter-bar">
               <label className="search-box">
-                <span className="search-icon">⌕</span>
+                <svg className="search-field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="10.8" cy="10.8" r="6.8" />
+                  <path d="m16 16 4.2 4.2" />
+                </svg>
                 <input
                   type="text"
                   value={search}
@@ -404,6 +414,8 @@ function App() {
                     <option value="Football">Football</option>
                     <option value="Pickleball">Pickleball</option>
                     <option value="Tennis">Tennis</option>
+                    <option value="Swimming">Swimming</option>
+                    <option value="Rifle / Pistol Shooting">Rifle / Pistol Shooting</option>
                     <option value="Badminton">Badminton</option>
                   </select>
                 </label>
@@ -484,6 +496,7 @@ function App() {
                       <span>◷ {tournament.dateLabel}</span>
                       <span>⌖ {tournament.area}, Vadodara</span>
                       <span>◇ {tournament.format}</span>
+                      {tournament.entryFee && <span>{tournament.entryFee}</span>}
                     </div>
                     <div className="discovery-card-footer">
                       <span className="status-badge status-upcoming">UPCOMING</span>

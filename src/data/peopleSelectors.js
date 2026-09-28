@@ -1,6 +1,6 @@
-import { getAllTurfs, getBookings, getDemoState } from './demoStore';
-import { accountStatus } from './adminAccounts';
-import { getAllTournaments } from './dashboardSelectors';
+import { getAllTurfs, getBookings, getDemoState } from './demoStore.js';
+import { accountStatus } from './adminAccounts.js';
+import { getAllTournaments } from './dashboardSelectors.js';
 
 // ---------------------------------------------------------------------------
 // People selectors (players & turf owners)

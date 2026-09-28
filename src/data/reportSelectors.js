@@ -1,7 +1,7 @@
-import { accountStatus } from './adminAccounts';
-import { getAllTurfs, getDemoState } from './demoStore';
-import { isRegisteredTurf, turfStatus, teamStatus } from './adminTurfs';
-import { getAllTournaments, getRegistrationCounts, tournamentStage } from './dashboardSelectors';
+import { accountStatus } from './adminAccounts.js';
+import { getAllTurfs, getDemoState } from './demoStore.js';
+import { isRegisteredTurf, turfStatus, teamStatus } from './adminTurfs.js';
+import { getAllTournaments, getRegistrationCounts, tournamentStage } from './dashboardSelectors.js';
 
 const countBy = (items, getStatus) => items.reduce((counts, item) => {
   const status = getStatus(item);

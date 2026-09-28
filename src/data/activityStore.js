@@ -1,4 +1,4 @@
-import { createId, getDemoState, saveDemoState } from './demoStore';
+import { createId, getDemoState, saveDemoState } from './demoStore.js';
 
 // ---------------------------------------------------------------------------
 // Activity feed

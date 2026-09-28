@@ -1,6 +1,6 @@
 import AdminLayout from './AdminLayout';
 import AdminIcon from './AdminIcon';
-import { route } from '../config/routes';
+import { normalizePath, route } from '../config/routes';
 import AdminDashboard from './AdminDashboard';
 import PlayersPage from './PlayersPage';
 import TurfOwnersPage from './TurfOwnersPage';
@@ -47,7 +47,7 @@ const sectionMeta = {
 };
 
 function AdminPage({ admin, state, logout }) {
-  const path = window.location.pathname.replace(/^\/The-Turf-/, '') || '/';
+  const path = normalizePath();
   const clean = splitAdminPath(path);
   // Any deeper path (e.g. /admin/tournaments/123) maps to its parent section.
   const base = clean === '/admin' ? '/admin/dashboard' : clean;

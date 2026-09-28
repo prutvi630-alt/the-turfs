@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 import { resolveActiveNav, resolvePageMeta } from './adminNav';
-import { route } from '../config/routes';
+import { normalizePath, route } from '../config/routes';
 
 // AdminLayout is the persistent shell for every protected /admin/* page.
 // Responsibilities:
@@ -21,7 +21,7 @@ function AdminLayout({ children, admin, notificationCount = 0, onLogout, onNavig
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const currentPath = window.location.pathname.replace(/^\/The-Turf-/, '') || '/';
+  const currentPath = normalizePath();
   const currentSearch = window.location.search || '';
   const activeId = resolveActiveNav(currentPath, currentSearch);
   const meta = resolvePageMeta(currentPath, currentSearch);

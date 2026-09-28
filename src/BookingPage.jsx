@@ -4,6 +4,7 @@ import { getAllTurfs, getBookings, getDemoState, getSession, getTurfOwnerId, sav
 import GlobalHeader from './GlobalHeader';
 import Footer from './Footer';
 import scannerImage from './data/scanner.jpeg';
+import { normalizePath } from './config/routes';
 
 const formatDate = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not selected';
 const overlaps = (fromTime, toTime, slotFrom, slotTo) => fromTime < slotTo && toTime > slotFrom;
@@ -21,7 +22,7 @@ const normalizeTurf = (turf = {}) => ({
 });
 
 const getSelectedTurf = () => {
-  const path = window.location.pathname.replace(/^\/The-Turf-/, '');
+  const path = normalizePath();
   const turfId = path.split('/').filter(Boolean)[1];
   return getAllTurfs().find((turf) => turf.id === turfId) || null;
 };

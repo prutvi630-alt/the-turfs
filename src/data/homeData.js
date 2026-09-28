@@ -85,15 +85,37 @@ export const sports = [
     description: 'Tennis activities and tournaments for players of different levels.',
     icon: '🎾',
     href: '/login',
+    status: 'coming-soon',
+  },
+  {
+    id: 'swimming',
+    name: 'Swimming',
+    image:
+      'https://images.pexels.com/photos/1263349/pexels-photo-1263349.jpeg?auto=compress&cs=tinysrgb&w=900',
+    description: 'Pool-based training sessions and swim events for active athletes.',
+    icon: '🏊',
+    href: '/login',
+    status: 'coming-soon',
+  },
+  {
+    id: 'rifle-pistol-shooting',
+    name: 'Rifle / Pistol Shooting',
+    image:
+      'https://i.pinimg.com/736x/9a/0c/d0/9a0cd0c1e2be781149cfa1975e3c4f00.jpg',
+    description: 'Precision shooting competitions and structured range sessions for skilled players.',
+    icon: '🎯',
+    href: '/login',
+    status: 'coming-soon',
   },
   {
     id: 'badminton',
     name: 'Badminton',
     image:
-      'https://images.unsplash.com/photo-1622279457486-62dcc4a431d6?auto=format&fit=crop&w=900&q=80',
+      'https://i.pinimg.com/1200x/45/0b/11/450b1195c4357c49020bcd5baf7f75b0.jpg',
     description: 'Badminton games, events and tournament opportunities.',
     icon: '🏸',
     href: '/login',
+    status: 'coming-soon',
   },
 ];
 

@@ -1,5 +1,5 @@
-import { createId, getDemoState, saveDemoState } from './demoStore';
-import { recordActivity, ACTIVITY_TYPES } from './activityStore';
+import { createId, getDemoState, saveDemoState } from './demoStore.js';
+import { recordActivity, ACTIVITY_TYPES } from './activityStore.js';
 
 export const MATCH_ROUNDS = ['League', 'Quarter Final', 'Semi Final', 'Final'];
 const roundOrder = MATCH_ROUNDS.reduce((result, round, index) => ({ ...result, [round]: index }), {});

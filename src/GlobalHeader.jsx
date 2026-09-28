@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import logo from './data/Logo.png';
+import { normalizePath } from './config/routes';
 
 export const navItems = [
   { label: 'Home', href: '/' },
@@ -31,7 +33,7 @@ function GlobalHeader() {
     window.location.href = `${import.meta.env.BASE_URL}${href.replace(/^\//, '')}`;
   };
 
-  const currentPath = window.location.pathname.replace(/^\/The-Turf-/, '') || '/';
+  const currentPath = normalizePath();
 
   const isCurrent = (href) => (
     href === '/'
@@ -49,7 +51,7 @@ function GlobalHeader() {
     <header className="topbar">
       <nav className="navbar container">
         <button type="button" className="brand-wrap" onClick={() => navigate('/')} aria-label="Go to home page">
-          <span className="brand-wordmark">CLIFT</span>
+          <img className="brand-logo" src={logo} alt="CLIFT" />
         </button>
 
         <div id="primary-navigation" className={`nav-links ${isMenuOpen ? 'open' : ''}`}>

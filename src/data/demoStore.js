@@ -1,5 +1,5 @@
-import { tournaments } from './tournaments';
-import { turfs } from './homeData';
+import { tournaments } from './tournaments.js';
+import { turfs } from './homeData.js';
 
 const STORAGE_KEY = 'vadodara-sports-demo-store-v1';
 const SESSION_KEY = 'vadodara-sports-session-v1';
@@ -442,6 +442,86 @@ export const findDuplicatePlayer = (state, form) => state.players.find((player) 
 export const findDuplicateContact = (state, form) => state.players.find((player) => (
   player.mobile === form.mobile || String(player.email || '').toLowerCase() === form.email.trim().toLowerCase()
 ));
+
+export const createDemoPlayerRegistration = (state, form) => {
+  const normalizedForm = { ...form };
+  const selectedGames = Array.isArray(normalizedForm.sports) && normalizedForm.sports.length
+    ? normalizedForm.sports
+    : [normalizedForm.sportId].filter(Boolean);
+  const selectedTurfIds = Array.isArray(normalizedForm.selectedTurfIds) && normalizedForm.selectedTurfIds.length
+    ? normalizedForm.selectedTurfIds
+    : [normalizedForm.selectedTurfId].filter(Boolean);
+  const normalizedEmail = String(normalizedForm.email || '').trim().toLowerCase();
+  const normalizedMobile = String(normalizedForm.mobile || '').replace(/\s/g, '');
+
+  if (state.players.some((player) => (
+    normalizePlayerKey(player.firstName) === normalizePlayerKey(normalizedForm.firstName || '')
+    && normalizePlayerKey(player.surname) === normalizePlayerKey(normalizedForm.surname || '')
+    && player.dob === normalizedForm.dob
+  ))) {
+    return { ok: false, error: 'A player with this name and date of birth is already registered. Please login instead.' };
+  }
+
+  if (state.players.some((player) => (
+    String(player.mobile || '').replace(/\s/g, '') === normalizedMobile
+    || String(player.email || '').trim().toLowerCase() === normalizedEmail
+  ))) {
+    return {
+      ok: false,
+      error: normalizedEmail && state.players.some((player) => String(player.email || '').trim().toLowerCase() === normalizedEmail)
+        ? 'This email is already registered. Please login instead.'
+        : 'This mobile number is already registered. Please login to continue.',
+    };
+  }
+
+  const player = {
+    id: createId('player'),
+    role: ROLES.PLAYER,
+    firstName: normalizedForm.firstName?.trim() || '',
+    surname: normalizedForm.surname?.trim() || '',
+    dob: normalizedForm.dob,
+    age: Number(normalizedForm.age ?? calculateAge(normalizedForm.dob)),
+    mobile: normalizedMobile,
+    email: normalizedEmail,
+    password: normalizedForm.password || 'demo123',
+    house: normalizedForm.house?.trim() || '',
+    street: normalizedForm.street?.trim() || '',
+    landmark: normalizedForm.landmark?.trim() || '',
+    city: 'Vadodara',
+    state: 'Gujarat',
+    pincode: normalizedForm.pincode || '',
+    profileImage: normalizedForm.profileImage || '',
+    sportId: selectedGames[0] || '',
+    selectedTurfId: selectedTurfIds[0] || '',
+    selectedTurfIds: selectedTurfIds,
+    sportIds: selectedGames.map((name) => name).filter(Boolean),
+    sports: selectedGames,
+    games: selectedGames,
+    createdAt: new Date().toISOString(),
+  };
+
+  state.players.push(player);
+  state.requests.push(...selectedTurfIds.map((turfId) => ({
+    id: createId('request'),
+    type: 'PLAYER_TURF_JOIN',
+    playerId: player.id,
+    turfId,
+    ownerId: getTurfOwnerId(turfId),
+    sportId: selectedGames[0] || '',
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+    respondedAt: null,
+  })));
+
+  const session = {
+    userId: player.id,
+    role: ROLES.PLAYER,
+    email: player.email,
+    issuedAt: new Date().toISOString(),
+  };
+
+  return { ok: true, player, session };
+};
 
 export const resetDemoData = () => {
   const state = seedState();
