@@ -134,7 +134,7 @@ img {
 }
 
 .page-shell {
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 .container {

@@ -22,7 +22,7 @@ function GlobalHeader() {
 
   const navigate = (href) => {
     setIsMenuOpen(false);
-    if (href === '/' && window.location.pathname === '/') {
+    if (href === '/' && normalizePath() === '/') {
       document.querySelector('#top')?.scrollIntoView({ behavior: 'smooth' });
       return;
     }
