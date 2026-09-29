@@ -156,11 +156,20 @@ function App() {
   const [search, setSearch] = useState('');
   const [sportFilter, setSportFilter] = useState('All');
   const [areaFilter, setAreaFilter] = useState('All');
+  const [showAllSports, setShowAllSports] = useState(false);
+  const [showAllTurfs, setShowAllTurfs] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 640 : false);
 
   const areaOptions = useMemo(
     () => ['All', ...new Set(turfs.map((turf) => turf.area).filter(Boolean))],
     []
   );
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 640);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -195,6 +204,15 @@ function App() {
     const matchesArea = areaFilter === 'All' || turf.area === areaFilter;
     return matchesSearch && matchesSport && matchesArea;
   });
+
+  const sportsInitialCount = isMobile ? 4 : 3;
+  const turfInitialCount = isMobile ? 2 : 3;
+  const visibleSports = showAllSports ? popularSports : popularSports.slice(0, sportsInitialCount);
+  const visibleTurfs = showAllTurfs ? filteredTurfs : filteredTurfs.slice(0, turfInitialCount);
+  const showSportsViewMore = !showAllSports && popularSports.length > sportsInitialCount;
+  const showTurfsViewMore = !showAllTurfs && filteredTurfs.length > turfInitialCount;
+  const showSportsViewLess = showAllSports && popularSports.length > sportsInitialCount;
+  const showTurfsViewLess = showAllTurfs && filteredTurfs.length > turfInitialCount;
 
   const goToSlide = (direction) => {
     setActiveSlide((prev) => (prev + direction + premiumHeroSlides.length) % premiumHeroSlides.length);
@@ -355,7 +373,7 @@ function App() {
             </div>
 
             <div className="sports-grid">
-              {popularSports.map((sport) => {
+              {visibleSports.map((sport) => {
                 const isComingSoon = sport.status === 'coming-soon';
 
                 return (
@@ -368,7 +386,6 @@ function App() {
                         <span className="sport-badge">{sport.icon}</span>
                         <h3>{sport.name}</h3>
                       </div>
-                      <p>{sport.description}</p>
                       {isComingSoon ? (
                         <span className="coming-soon-pill">Coming Soon</span>
                       ) : (
@@ -381,6 +398,22 @@ function App() {
                 );
               })}
             </div>
+
+            {showSportsViewMore && (
+              <div className="view-more-wrap">
+                <button type="button" className="view-more-btn" onClick={() => setShowAllSports(true)}>
+                  View More
+                </button>
+              </div>
+            )}
+
+            {showSportsViewLess && (
+              <div className="view-more-wrap">
+                <button type="button" className="view-more-btn" onClick={() => setShowAllSports(false)}>
+                  View Less
+                </button>
+              </div>
+            )}
           </div>
         </section>
 
@@ -432,7 +465,7 @@ function App() {
             </div>
 
             <div className="turfs-grid">
-              {filteredTurfs.map((turf) => (
+              {visibleTurfs.map((turf) => (
                 <article key={turf.id} className="turf-card reveal" data-reveal>
                   <div className="turf-image-wrap">
                     <img src={turf.image} alt={turf.name} loading="lazy" />
@@ -474,6 +507,22 @@ function App() {
                 </article>
               ))}
             </div>
+
+            {showTurfsViewMore && (
+              <div className="view-more-wrap">
+                <button type="button" className="view-more-btn" onClick={() => setShowAllTurfs(true)}>
+                  View More
+                </button>
+              </div>
+            )}
+
+            {showTurfsViewLess && (
+              <div className="view-more-wrap">
+                <button type="button" className="view-more-btn" onClick={() => setShowAllTurfs(false)}>
+                  View Less
+                </button>
+              </div>
+            )}
           </div>
         </section>
 

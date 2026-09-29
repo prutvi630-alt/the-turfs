@@ -1497,6 +1497,38 @@ html {
   color: var(--muted);
 }
 
+.view-more-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 22px;
+}
+
+.view-more-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 0 26px;
+  border: 1px solid rgba(130, 186, 255, 0.35);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(38, 99, 198, 0.18), rgba(38, 99, 198, 0.08));
+  color: var(--text);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.view-more-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(130, 186, 255, 0.6);
+  box-shadow: 0 12px 24px rgba(11, 25, 42, 0.26);
+}
+
+.view-more-btn:active {
+  transform: translateY(0);
+}
+
 .link-button {
   display: inline-flex;
   align-items: center;
@@ -2129,7 +2161,10 @@ html {
     margin-top: -40px;
   }
 
-  .sports-grid,
+  .sports-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .turfs-grid,
   .tournament-discovery-grid,
   .turf-directory-grid,
