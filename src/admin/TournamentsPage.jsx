@@ -198,6 +198,7 @@ function TournamentsPage() {
                   <th>Venue</th>
                   <th>Start Date</th>
                   <th>Registration</th>
+                  <th>Fee</th>
                   <th>Slots</th>
                   <th>Status</th>
                   <th className="admin-col-actions">Actions</th>
@@ -221,6 +222,7 @@ function TournamentsPage() {
                     <td data-label="Venue"><span className="admin-cell-muted">{row.venue}</span></td>
                     <td data-label="Start Date"><span className="admin-cell-muted">{row.startLabel}</span></td>
                     <td data-label="Registration"><span className={`admin-pill tone-${row.registrationStatus === 'Open' ? 'ok' : row.registrationStatus === 'Draft' ? 'neutral' : 'warn'}`}>{row.registrationStatus}</span></td>
+                    <td data-label="Fee"><span className="admin-cell-muted">{row.registrationFee}</span></td>
                     <td data-label="Slots"><span className="admin-count-badge">{row.registeredTeams}{row.teamCapacity ? `/${row.teamCapacity}` : ''}</span></td>
                     <td data-label="Status"><StatusPill status={row.status} /></td>
                     <td data-label="Actions" className="admin-col-actions">
@@ -378,6 +380,7 @@ function TournamentDetailDrawer({ tournament, onClose, onEdit, onAction }) {
           <DetailField label="Area" value={tournament.area} />
           <DetailField label="Start date" value={tournament.startLabel} />
           <DetailField label="Registration" value={tournament.registrationStatus} />
+          <DetailField label={String(t.registrationType || 'Team').toLowerCase() === 'individual' ? 'Player fee' : 'Team fee'} value={tournament.registrationFee} />
           <DetailField label="Slots" value={`${tournament.registeredTeams}${tournament.teamCapacity ? ` / ${tournament.teamCapacity}` : ''}`} />
           <DetailField label="Prize pool" value={tournament.prizePool || '—'} />
         </div>

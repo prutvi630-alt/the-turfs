@@ -35,6 +35,11 @@ function GlobalHeader() {
 
   const currentPath = normalizePath();
 
+  const openLogin = () => {
+    setIsMenuOpen(false);
+    window.dispatchEvent(new Event('clift:open-login-modal'));
+  };
+
   const isCurrent = (href) => (
     href === '/'
       ? currentPath === '/'
@@ -61,16 +66,13 @@ function GlobalHeader() {
             </button>
           ))}
           <div className="mobile-menu-actions">
-            <button type="button" className="nav-login" onClick={() => navigate('/login')}>Login</button>
+            <button type="button" className="nav-login" onClick={openLogin}>Login</button>
             <button type="button" className="nav-register" onClick={() => navigate('/signup')}>Register</button>
           </div>
         </div>
 
         <div className="nav-actions">
-          <button type="button" className="search-control" aria-label="Search">
-            <span className="search-icon" aria-hidden="true" />
-          </button>
-          <button type="button" className="nav-login" onClick={() => navigate('/login')}>Login</button>
+          <button type="button" className="nav-login" onClick={openLogin}>Login</button>
           <button type="button" className="nav-register" onClick={() => navigate('/signup')}>Register</button>
         </div>
 

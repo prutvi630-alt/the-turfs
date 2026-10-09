@@ -52,6 +52,8 @@ function AdminLayout({ children, admin, notificationCount = 0, onLogout, onNavig
 
   const handleNavigate = (href) => {
     setDrawerOpen(false);
+    const target = new URL(route(href), window.location.href);
+    if (target.href === window.location.href) return;
     if (onNavigate) onNavigate(href);
     else window.location.href = route(href);
   };

@@ -78,11 +78,31 @@ export const getTeamRows = () => {
     const owner = (state.owners || []).find((item) => item.id === team.ownerId);
     const turf = allTurfs.find((item) => item.id === team.turfId);
     const memberIds = team.memberIds || [];
-    const members = memberIds
+    const linkedPlayers = memberIds
       .map((memberId) => (state.players || []).find((player) => player.id === memberId))
       .filter(Boolean);
 
-    const memberNames = members.map((player) => `${player.firstName || ''} ${player.surname || ''}`.trim());
+    const members = [
+      ...(Array.isArray(team.members) ? team.members.map((member) => ({
+        id: member.id,
+        name: member.name,
+        sport: team.sport || '—',
+        email: member.email || '',
+        mobile: member.mobile || '',
+        age: member.age || '',
+        role: member.role || 'Player',
+      })) : []),
+      ...linkedPlayers.map((player) => ({
+        id: player.id,
+        name: `${player.firstName || ''} ${player.surname || ''}`.trim(),
+        sport: player.sportId || '—',
+        email: player.email || '',
+        mobile: player.mobile || '',
+        age: player.age || '',
+        role: team.captainId === player.id ? 'Captain' : 'Player',
+      })).filter((player) => !team.members?.some((member) => member.playerId === player.id)),
+    ];
+    const memberNames = members.map((player) => player.name);
     // A team's tournament = the first tournament whose venue matches its turf and
     // sport, else the first matching sport. Best-effort link using existing data.
     const tournament = tournaments.find((item) => item.sport === team.sport && item.venueId === team.turfId)
@@ -103,20 +123,14 @@ export const getTeamRows = () => {
       name: team.name || 'Team',
       sport: team.sport || '—',
       description: team.description || '',
-      captain: memberNames[0] || '—',
-      captainId: memberIds[0] || '',
+      captain: team.captainDetails?.name || team.captain || memberNames[0] || '—',
+      captainId: team.captainId || memberIds[0] || '',
       owner: owner?.name || '—',
       ownerId: team.ownerId || '',
       turfName: turf?.name || '—',
       turfId: team.turfId || '',
       memberIds,
-      members: members.map((player) => ({
-        id: player.id,
-        name: `${player.firstName || ''} ${player.surname || ''}`.trim(),
-        sport: player.sportId || '—',
-        email: player.email || '',
-        mobile: player.mobile || '',
-      })),
+      members,
       playerCount: members.length,
       tournament: tournament?.name || '—',
       tournamentId: tournament?.id || '',

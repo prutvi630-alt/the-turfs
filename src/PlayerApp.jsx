@@ -1,12 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { API_URL, apiRequest } from './config/api';
 import { normalizePath, route } from './config/routes';
 import { sports, turfs } from './data/homeData';
-import { getAllTournaments } from './data/dashboardSelectors';
+import { getAllTournaments, isTournamentInterestActive } from './data/dashboardSelectors';
+import { getPlayerInterestedTournamentIds } from './data/tournamentInterest';
+import { maskBankAccountNumber, normalizeStaffBankDetails } from './data/staffBankDetails';
 import GlobalHeader from './GlobalHeader';
 import Footer from './Footer';
-import scannerImage from './data/scanner.jpeg';
 import ConnectedOwnerDashboard from './OwnerDashboard';
+import PlayerTeams from './PlayerTeams';
+import AdminIcon from './admin/AdminIcon';
 import AdminLogin from './admin/AdminLogin';
 import AdminPage from './admin/AdminPage';
 import { ACTIVITY_TYPES, recordActivity } from './data/activityStore';
@@ -14,6 +18,8 @@ import {
   authenticateUser,
   calculateAge,
   checkAdminAccess,
+  createDemoStaffRegistration,
+  createDemoStaffApplication,
   createDemoPlayerRegistration,
   createId,
   dashboardPathForRole,
@@ -28,12 +34,15 @@ import {
   getTurfOwnerId,
   saveDemoState,
   setSession,
+  updateStaffBankDetails,
   LOGIN_ROLES,
   ROLES,
 } from './data/demoStore';
+import { Toast } from './admin/AdminUI';
 
 const appNav = [
   { label: 'Dashboard', href: '/player/dashboard' },
+  { label: 'My Teams', href: '/player/dashboard#player-teams' },
   { label: 'My Profile', href: '/player/profile' },
   { label: 'Find Turf', href: '/player/dashboard#find-turf' },
   { label: 'Tournaments', href: '/tournaments' },
@@ -190,6 +199,8 @@ function PlayerApp() {
   };
 
   if (path === '/signup') return <SignupPage />;
+  if (path === '/scorer/register') return <StaffRegistration role={ROLES.SCORER} />;
+  if (path === '/coach/register') return <StaffRegistration role={ROLES.COACH} />;
   if (path === '/player/register') return <PlayerRegistration onCreated={(nextSession) => { setCurrentSession(nextSession); refresh(); }} />;
   if (path === '/turf-owner/register') return <TurfOwnerRegistration />;
   if (path === '/turf-owner/success') return <TurfRegistrationSuccess />;
@@ -197,6 +208,13 @@ function PlayerApp() {
   if (path.startsWith('/turf-owner')) {
     if (!session || session.role !== ROLES.TURF_OWNER) return <AccessDenied session={session} />;
     return <ConnectedOwnerDashboard state={state} session={session} refresh={refresh} logout={logout} />;
+  }
+  if (path.startsWith('/scorer') || path.startsWith('/coach')) {
+    const role = path.startsWith('/scorer') ? ROLES.SCORER : ROLES.COACH;
+    if (!session || session.role !== role) return <ProtectedMessage role={role === ROLES.COACH ? 'coach' : 'scorer'} />;
+    const profile = (role === ROLES.COACH ? state.coaches : state.scorers).find((account) => account.id === session.userId);
+    if (!profile) return <ProtectedMessage role={role === ROLES.COACH ? 'coach' : 'scorer'} />;
+    return <StaffProfilePage profile={profile} onLogout={logout} refresh={refresh} />;
   }
   // Admin portal: a dedicated login entry point plus the protected shell.
   // Protection is decided by the session role via checkAdminAccess, so a Player
@@ -233,6 +251,70 @@ function PlayerApp() {
   return <LoginPage onLogin={(nextSession) => { setCurrentSession(nextSession); refresh(); }} />;
 }
 
+export function LoginModalHost() {
+  const [isOpen, setIsOpen] = useState(false);
+  const triggerRef = useRef(null);
+  const closeButtonRef = useRef(null);
+
+  useEffect(() => {
+    const openModal = () => {
+      triggerRef.current = document.activeElement;
+      setIsOpen(true);
+    };
+    window.addEventListener('clift:open-login-modal', openModal);
+    return () => window.removeEventListener('clift:open-login-modal', openModal);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const scrollY = window.scrollY;
+    const bodyStyle = document.body.style;
+    const previousStyles = {
+      position: bodyStyle.position,
+      top: bodyStyle.top,
+      left: bodyStyle.left,
+      right: bodyStyle.right,
+      width: bodyStyle.width,
+      overflow: bodyStyle.overflow,
+    };
+    bodyStyle.position = 'fixed';
+    bodyStyle.top = `-${scrollY}px`;
+    bodyStyle.left = '0';
+    bodyStyle.right = '0';
+    bodyStyle.width = '100%';
+    bodyStyle.overflow = 'hidden';
+
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape' && !event.defaultPrevented) setIsOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    closeButtonRef.current?.focus?.({ preventScroll: true });
+
+    return () => {
+      window.removeEventListener('keydown', closeOnEscape);
+      Object.assign(bodyStyle, previousStyles);
+      window.scrollTo({ left: 0, top: scrollY, behavior: 'instant' });
+      triggerRef.current?.focus?.({ preventScroll: true });
+    };
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="login-modal-backdrop" onClick={(event) => {
+      if (event.target === event.currentTarget) setIsOpen(false);
+    }}>
+      <section className="login-modal-dialog" role="dialog" aria-modal="true" aria-label="Log in">
+        <button ref={closeButtonRef} type="button" className="login-modal-close" onClick={() => setIsOpen(false)} aria-label="Close login">×</button>
+        <div className="login-modal-scroll">
+          <LoginPage isModal onLogin={() => setIsOpen(false)} />
+        </div>
+      </section>
+    </div>
+  );
+}
+
 // Cross-role access: a signed-in user hitting another role's protected URL is
 // redirected to their own authorized dashboard; guests are sent to login.
 function AccessDenied({ session }) {
@@ -251,16 +333,561 @@ function AccessDenied({ session }) {
   return <ProtectedMessage role="member" />;
 }
 
-function AuthFrame({ children, eyebrow, title, text }) {
-  return <div className="player-app"><GlobalHeader /><div className="auth-page"><div className="auth-visual"><div className="auth-visual-copy"><span className="eyebrow">VADODARA SPORTS PLATFORM</span><strong>YOUR GAME.<br />YOUR PLACE.</strong><span>Discover. Connect. Compete.</span></div></div><main className="auth-panel"><div className="auth-heading"><span className="section-kicker">{eyebrow}</span><h1>{title}</h1><p>{text}</p></div>{children}</main></div><Footer /></div>;
+function AuthFrame({ children, eyebrow, title, text, isModal = false }) {
+  const pageContent = <><div className="auth-visual"><div className="auth-visual-copy"><span className="eyebrow">VADODARA SPORTS PLATFORM</span><strong>YOUR GAME.<br />YOUR PLACE.</strong><span>Discover. Connect. Compete.</span></div></div><main className="auth-panel"><div className="auth-heading"><span className="section-kicker">{eyebrow}</span><h1>{title}</h1><p>{text}</p></div>{children}</main></>;
+
+  if (isModal) return <div className="auth-page login-modal-page">{pageContent}</div>;
+
+  return <div className="player-app"><GlobalHeader /><div className="auth-page">{pageContent}</div><Footer /></div>;
 }
 
 function SignupPage() {
-  return <AuthFrame eyebrow="JOIN THE PLATFORM" title="HOW DO YOU WANT TO JOIN?" text="Choose how you want to be part of the Vadodara Sports Platform."><div className="registration-choice-grid"><RegistrationChoice icon="🏃" title="Player Registration" text="Create your player profile, choose your sport, discover turfs and stay connected with upcoming matches and tournaments." action="Register as Player" onClick={() => navigate('/player/register')} /><RegistrationChoice icon="🏟️" title="Turf Registration" text="Register your sports venue and connect with players looking for a place to play." action="Register Your Turf" onClick={() => navigate('/turf-owner/register')} /></div><p className="auth-footer-note">Already part of the platform? <button type="button" onClick={() => navigate('/login')}>Login here</button></p></AuthFrame>;
+  const [showTypes, setShowTypes] = useState(false);
+  const [registrationType, setRegistrationType] = useState('');
+  const routes = {
+    player: '/player/register',
+    turf: '/turf-owner/register',
+    scorer: '/scorer/register',
+    coach: '/coach/register',
+  };
+
+  return (
+    <AuthFrame eyebrow="JOIN THE PLATFORM" title="REGISTER TO THE PLATFORM." text="Choose your registration type to continue.">
+      {!showTypes ? (
+        <button type="button" className="btn btn-primary form-submit" onClick={() => setShowTypes(true)}>Register</button>
+      ) : (
+        <div className="auth-form">
+          <label className="form-field">
+            <span>Registration Type</span>
+            <ResponsiveSelect
+              value={registrationType}
+              placeholder="Select Type Of Register Type"
+              ariaLabel="Registration type"
+              options={[
+                { value: 'player', label: 'Player' },
+                { value: 'turf', label: 'Turf' },
+                { value: 'scorer', label: 'Scorer' },
+                { value: 'coach', label: 'Coach' },
+              ]}
+              onChange={(selectedType) => {
+                setRegistrationType(selectedType);
+                if (routes[selectedType]) navigate(routes[selectedType]);
+              }}
+            />
+          </label>
+        </div>
+      )}
+      <p className="auth-footer-note">Already part of the platform? <button type="button" onClick={() => navigate('/login')}>Login here</button></p>
+    </AuthFrame>
+  );
 }
 
-function RegistrationChoice({ icon, title, text, action, onClick }) {
-  return <article className="registration-choice"><span className="choice-icon">{icon}</span><span className="choice-number">01</span><h2>{title}</h2><p>{text}</p><button type="button" className="btn btn-primary" onClick={onClick}>{action} <span>→</span></button></article>;
+function ResponsiveSelect({ value, options, onChange, placeholder, ariaLabel }) {
+  const id = useId().replace(/:/g, '');
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
+  const optionRefs = useRef([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [position, setPosition] = useState(null);
+  const selectedIndex = options.findIndex((option) => option.value === value);
+  const selectedOption = selectedIndex >= 0 ? options[selectedIndex] : null;
+
+  const closeMenu = (restoreFocus = false) => {
+    setIsOpen(false);
+    setPosition(null);
+    if (restoreFocus) triggerRef.current?.focus({ preventScroll: true });
+  };
+
+  const openMenu = (direction = 0) => {
+    const nextIndex = selectedIndex >= 0
+      ? (selectedIndex + direction + options.length) % options.length
+      : direction < 0 ? options.length - 1 : 0;
+    setActiveIndex(nextIndex);
+    setPosition(null);
+    setIsOpen(true);
+  };
+
+  useLayoutEffect(() => {
+    if (!isOpen) return undefined;
+
+    const updatePosition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const viewportPadding = 8;
+      const gap = 6;
+      const width = Math.min(rect.width, window.innerWidth - viewportPadding * 2);
+      const left = Math.max(viewportPadding, Math.min(rect.left, window.innerWidth - width - viewportPadding));
+      const desiredHeight = Math.min(options.length * 48 + 10, 260);
+      const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - gap - viewportPadding);
+      const spaceAbove = Math.max(0, rect.top - gap - viewportPadding);
+      const opensUp = spaceBelow < desiredHeight && spaceAbove >= spaceBelow * 0.9;
+      const availableHeight = opensUp ? spaceAbove : spaceBelow;
+      const height = Math.min(desiredHeight, availableHeight);
+      const top = opensUp ? rect.top - gap - height : rect.bottom + gap;
+
+      setPosition({ top: Math.max(viewportPadding, top), left, width, height });
+    };
+
+    updatePosition();
+    const focusFrame = window.requestAnimationFrame(() => optionRefs.current[activeIndex]?.scrollIntoView({ block: 'nearest' }));
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [activeIndex, isOpen, options.length]);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const closeOutside = (event) => {
+      if (triggerRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) return;
+      closeMenu();
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') closeMenu(true);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isOpen]);
+
+  const moveActive = (index) => {
+    const nextIndex = Math.max(0, Math.min(index, options.length - 1));
+    setActiveIndex(nextIndex);
+    window.requestAnimationFrame(() => optionRefs.current[nextIndex]?.scrollIntoView({ block: 'nearest' }));
+  };
+
+  const handleTriggerKeyDown = (event) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const direction = event.key === 'ArrowDown' ? 1 : -1;
+      if (isOpen) moveActive((activeIndex + direction + options.length) % options.length);
+      else openMenu(direction);
+    } else if (isOpen && event.key === 'Home') {
+      event.preventDefault();
+      moveActive(0);
+    } else if (isOpen && event.key === 'End') {
+      event.preventDefault();
+      moveActive(options.length - 1);
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      if (isOpen) {
+        onChange(options[activeIndex].value);
+        closeMenu(true);
+      }
+      else openMenu();
+    } else if (event.key === 'Escape' && isOpen) {
+      event.preventDefault();
+      closeMenu(true);
+    } else if (event.key === 'Tab' && isOpen) {
+      closeMenu();
+    }
+  };
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        id={`${id}-trigger`}
+        type="button"
+        className="responsive-select-trigger"
+        role="combobox"
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-controls={`${id}-listbox`}
+        aria-activedescendant={isOpen ? `${id}-option-${activeIndex}` : undefined}
+        onClick={() => (isOpen ? closeMenu() : openMenu())}
+        onKeyDown={handleTriggerKeyDown}
+      >
+        <span className={selectedOption ? '' : 'is-placeholder'}>{selectedOption?.label || placeholder}</span>
+        <span className={`responsive-select-chevron ${isOpen ? 'is-open' : ''}`} aria-hidden="true" />
+      </button>
+      {isOpen && position && createPortal(
+        <div
+          ref={menuRef}
+          id={`${id}-listbox`}
+          className="responsive-select-menu"
+          role="listbox"
+          aria-label={ariaLabel}
+          style={{ top: position.top, left: position.left, width: position.width, height: position.height }}
+        >
+          {options.map((option, index) => (
+            <div
+              key={option.value}
+              ref={(element) => { optionRefs.current[index] = element; }}
+              id={`${id}-option-${index}`}
+              role="option"
+              aria-selected={option.value === value}
+              className={`responsive-select-option ${option.value === value ? 'is-selected' : ''} ${index === activeIndex ? 'is-active' : ''}`}
+              onMouseEnter={() => setActiveIndex(index)}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => { onChange(option.value); closeMenu(true); }}
+            >
+              {option.label}
+            </div>
+          ))}
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+function StaffRegistration({ role }) {
+  const isCoach = role === ROLES.COACH;
+  const roleLabel = isCoach ? 'Coach' : 'Scorer';
+  const sportPrompt = isCoach ? 'Which Game/Sport do you coach?' : 'Which Game/Sport do you score?';
+  const [form, setForm] = useState({
+    fullName: '', mobile: '', email: '', address: '', experience: '', sports: [], password: '', confirmPassword: '',
+    bankDetails: { bankName: '', accountHolderName: '', accountNumber: '', ifscCode: '', mobileNumber: '' },
+  });
+  const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+
+  const toggleSport = (sportName) => setForm((current) => {
+    const selected = current.sports || [];
+    return {
+      ...current,
+      sports: selected.includes(sportName)
+        ? selected.filter((item) => item !== sportName)
+        : [...selected, sportName],
+    };
+  });
+
+  const validate = () => {
+    const next = {};
+    const selectedSports = Array.isArray(form.sports) ? form.sports.filter(Boolean) : [];
+    if (!form.fullName.trim()) next.fullName = 'Full name is required.';
+    if (!/^\d{10}$/.test(form.mobile.replace(/\D/g, ''))) next.mobile = 'Enter a valid 10-digit mobile number.';
+    if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) next.email = 'Enter a valid email address.';
+    if (!form.address.trim()) next.address = 'Address is required.';
+    if (form.experience === '' || !Number.isFinite(Number(form.experience)) || Number(form.experience) < 0) next.experience = 'Enter valid years of experience.';
+    if (!selectedSports.length) next.sport = 'Select at least one game or sport.';
+    if (form.password.length < 6) next.password = 'Password must be at least 6 characters.';
+    if (form.confirmPassword !== form.password) next.confirmPassword = 'Passwords do not match.';
+    const bankValidation = normalizeStaffBankDetails(form.bankDetails);
+    Object.assign(next, bankValidation.errors);
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (isSubmitting || !validate()) return;
+    setIsSubmitting(true);
+
+    const state = getDemoState();
+    const registration = createDemoStaffRegistration(state, { ...form, sport: form.sports[0] || '' }, role);
+    if (!registration.ok) {
+      setErrors({ form: registration.error });
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (isBackendConfigured()) {
+      try {
+        const action = isCoach ? 'registerCoach' : 'registerScorer';
+        const result = await apiRequest({
+          action,
+          registrationType: role,
+          role,
+          name: form.fullName.trim(),
+          fullName: form.fullName.trim(),
+          mobile: form.mobile.replace(/\D/g, ''),
+          email: form.email.trim().toLowerCase(),
+          address: form.address.trim(),
+          experience: Number(form.experience),
+          sport: form.sports[0] || '',
+          sports: form.sports,
+          bankDetails: registration.profile.bankDetails,
+          password: form.password,
+        }, { timeoutMs: 5000 });
+
+        if (result?.success) {
+          const remoteProfile = result.profile || result.coach || result.scorer || result.user || {};
+          const previousProfileId = registration.profile.id;
+          const remoteProfileId = remoteProfile.id || remoteProfile.userId || previousProfileId;
+          registration.profile.id = remoteProfileId;
+          const collection = isCoach ? state.coaches : state.scorers;
+          const storedProfile = collection.find((account) => account.id === previousProfileId);
+          if (storedProfile) storedProfile.id = remoteProfileId;
+          registration.session.userId = registration.profile.id;
+        }
+      } catch {
+        // The configured script may not expose these new role actions yet; keep
+        // the existing local demo registration path available in that case.
+      }
+    }
+
+    if (!saveDemoState(state)) {
+      setErrors({ form: 'Unable to save your registration. Please try again.' });
+      setIsSubmitting(false);
+      return;
+    }
+
+    setSession(registration.session);
+    setIsSubmitting(false);
+    navigate(dashboardPathForRole(role));
+  };
+
+  return (
+    <div className="player-app registration-page">
+      <GlobalHeader />
+      <main className="registration-main container">
+        <div className="registration-heading"><span className="section-kicker">{roleLabel.toUpperCase()} REGISTRATION</span><h1>REGISTER AS A {roleLabel.toUpperCase()}.</h1><p>Create your {roleLabel.toLowerCase()} profile to join the Vadodara sports community.</p></div>
+        <form className="registration-form" onSubmit={submit} noValidate>
+          {errors.form && <div className="form-alert" role="alert">{errors.form}</div>}
+          <section className="form-section">
+            <FormSectionTitle number="01" title={`${roleLabel} Information`} />
+            <div className="form-grid two">
+              <Field label="Full Name" value={form.fullName} onChange={(value) => update('fullName', value)} placeholder="Enter your full name" error={errors.fullName} required />
+              <Field label="Mobile Number" value={form.mobile} onChange={(value) => update('mobile', value.replace(/\D/g, '').slice(0, 10))} placeholder="10-digit mobile number" error={errors.mobile} required />
+              <Field label="Email Address" type="email" value={form.email} onChange={(value) => update('email', value)} placeholder="you@example.com" error={errors.email} required />
+              <Field label="Years of Experience" type="number" value={form.experience} onChange={(value) => update('experience', value)} placeholder="e.g. 3" error={errors.experience} required />
+              <Field label="Address" value={form.address} onChange={(value) => update('address', value)} placeholder="Enter your address" error={errors.address} required />
+              <Field label="Password" type="password" value={form.password} onChange={(value) => update('password', value)} placeholder="At least 6 characters" error={errors.password} required />
+              <Field label="Confirm Password" type="password" value={form.confirmPassword} onChange={(value) => update('confirmPassword', value)} placeholder="Re-enter your password" error={errors.confirmPassword} required />
+            </div>
+          </section>
+
+          <section className="form-section">
+            <FormSectionTitle number="02" title="Game / Sport Selection" />
+            <p className="form-section-note">Select all the games you {isCoach ? 'coach' : 'score'}.</p>
+            <div className="sport-choice-grid">
+              {['Cricket', 'Football', 'Pickleball', 'Tennis', 'Badminton', 'Volleyball'].map((sportName) => (
+                <button type="button" key={sportName} className={`sport-choice ${form.sports.includes(sportName) ? 'selected' : ''}`} onClick={() => toggleSport(sportName)}>
+                  <span>{sportName === 'Cricket' ? '🏏' : sportName === 'Football' ? '⚽' : sportName === 'Pickleball' ? '🏓' : sportName === 'Tennis' ? '🎾' : sportName === 'Badminton' ? '🏸' : '🏐'}</span>
+                  <strong>{sportName}</strong>
+                  <i>{form.sports.includes(sportName) ? 'Selected' : 'Available'}</i>
+                </button>
+              ))}
+            </div>
+            {errors.sport && <small className="inline-error">{errors.sport}</small>}
+          </section>
+
+          <section className="form-section">
+            <FormSectionTitle number="03" title="Bank Details" />
+            <div className="form-grid two">
+              <Field label="Bank Name" value={form.bankDetails.bankName} onChange={(value) => update('bankDetails', { ...form.bankDetails, bankName: value })} placeholder="Enter bank name" error={errors.bankName} required />
+              <Field label="Account Holder Name" value={form.bankDetails.accountHolderName} onChange={(value) => update('bankDetails', { ...form.bankDetails, accountHolderName: value })} placeholder="Name on bank account" error={errors.accountHolderName} required />
+              <Field label="Bank Account Number" value={form.bankDetails.accountNumber} onChange={(value) => update('bankDetails', { ...form.bankDetails, accountNumber: value.replace(/\D/g, '').slice(0, 18) })} placeholder="9–18 digits" error={errors.accountNumber} required inputMode="numeric" maxLength={18} />
+              <Field label="IFSC Code" value={form.bankDetails.ifscCode} onChange={(value) => update('bankDetails', { ...form.bankDetails, ifscCode: value.replace(/[^a-z\d]/gi, '').toUpperCase().slice(0, 11) })} placeholder="e.g. SBIN0001234" error={errors.ifscCode} required maxLength={11} />
+              <Field label="Bank Mobile Number" value={form.bankDetails.mobileNumber} onChange={(value) => update('bankDetails', { ...form.bankDetails, mobileNumber: value.replace(/\D/g, '').slice(0, 10) })} placeholder="10-digit Indian mobile" error={errors.mobileNumber} required inputMode="numeric" maxLength={10} />
+            </div>
+          </section>
+
+          <div className="registration-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => navigate('/signup')}>Back</button>
+            <button type="submit" className="btn btn-primary" disabled={isSubmitting}>{isSubmitting ? 'REGISTERING...' : `Register as ${roleLabel}`}</button>
+          </div>
+        </form>
+      </main>
+      <Footer />
+    </div>
+  );
+}
+
+function StaffProfilePage({ profile, onLogout, refresh }) {
+  const roleLabel = profile.role === ROLES.COACH ? 'Coach' : 'Scorer';
+  const [notice, setNotice] = useState('');
+  const [bankEditorOpen, setBankEditorOpen] = useState(false);
+  const [bankForm, setBankForm] = useState(() => ({
+    bankName: profile.bankDetails?.bankName || '',
+    accountHolderName: profile.bankDetails?.accountHolderName || '',
+    accountNumber: profile.bankDetails?.accountNumber || '',
+    ifscCode: profile.bankDetails?.ifscCode || '',
+    mobileNumber: profile.bankDetails?.mobileNumber || '',
+  }));
+  const [bankErrors, setBankErrors] = useState({});
+  const [bankToast, setBankToast] = useState(null);
+  const [isSavingBankDetails, setIsSavingBankDetails] = useState(false);
+
+  const sportMatches = Array.isArray(profile.sports) && profile.sports.length
+    ? profile.sports
+    : [profile.sport].filter(Boolean);
+
+  const tournaments = useMemo(() => getAllTournaments().filter((tournament) => {
+    if (!sportMatches.length) return true;
+    return sportMatches.some((sport) => String(tournament.sport).toLowerCase() === String(sport).toLowerCase());
+  }), [sportMatches]);
+
+  const [applications, setApplications] = useState(() => (
+    (getDemoState().staffApplications || []).filter((item) => item.applicantId === profile.id)
+  ));
+
+  const handleApply = (tournament) => {
+    const state = getDemoState();
+    const duplicate = (state.staffApplications || []).some((item) => (
+      item.applicantId === profile.id && item.tournamentId === tournament.id && item.role === profile.role
+    ));
+    if (duplicate) {
+      setApplications((state.staffApplications || []).filter((item) => item.applicantId === profile.id));
+      setNotice('You have already applied for this tournament.');
+      return;
+    }
+
+    const created = createDemoStaffApplication(state, {
+      applicantId: profile.id,
+      role: profile.role,
+      tournamentId: tournament.id,
+      tournamentName: tournament.name,
+      sport: tournament.sport,
+      note: `${roleLabel} application for ${tournament.name}`,
+    });
+    if (!saveDemoState(state)) {
+      setNotice('Unable to save your application. Please try again.');
+      return;
+    }
+    setApplications(state.staffApplications.filter((item) => item.applicantId === profile.id));
+    setNotice(`Application submitted for ${created.tournamentName}.`);
+  };
+
+  const openBankEditor = () => {
+    setBankForm({
+      bankName: profile.bankDetails?.bankName || '',
+      accountHolderName: profile.bankDetails?.accountHolderName || '',
+      accountNumber: profile.bankDetails?.accountNumber || '',
+      ifscCode: profile.bankDetails?.ifscCode || '',
+      mobileNumber: profile.bankDetails?.mobileNumber || '',
+    });
+    setBankErrors({});
+    setBankEditorOpen(true);
+  };
+
+  const saveBankDetails = (event) => {
+    event.preventDefault();
+    if (isSavingBankDetails) return;
+    const normalized = normalizeStaffBankDetails(bankForm);
+    setBankErrors(normalized.errors);
+    if (!normalized.valid) return;
+
+    setIsSavingBankDetails(true);
+    const state = getDemoState();
+    const result = updateStaffBankDetails(state, profile.id, profile.role, normalized.bankDetails);
+    if (!result.ok || !saveDemoState(state)) {
+      setBankToast({
+        tone: 'danger',
+        title: 'Unable to update bank details',
+        text: 'Unable to update bank details. Please try again.',
+      });
+      setIsSavingBankDetails(false);
+      return;
+    }
+
+    setBankForm(normalized.bankDetails);
+    setBankEditorOpen(false);
+    setBankToast({ tone: 'success', title: 'Bank details updated successfully.' });
+    setIsSavingBankDetails(false);
+    refresh();
+  };
+
+  return (
+    <div className="player-app registration-page">
+      <GlobalHeader />
+      <main className="registration-main container">
+        <div className="registration-heading"><span className="section-kicker">ACCOUNT DETAILS</span><h1>YOUR {roleLabel.toUpperCase()} WORKSPACE.</h1><p>Your {roleLabel.toLowerCase()} account is ready.</p></div>
+        <section className="form-section staff-profile-section">
+          <FormSectionTitle number="01" title={`${roleLabel} Information`} />
+          <div className="review-grid">
+            <ReviewItem label="Name" value={profile.name} />
+            <ReviewItem label="Mobile" value={profile.mobile} />
+            <ReviewItem label="Email" value={profile.email} />
+            <ReviewItem label="Address" value={profile.address} />
+            <ReviewItem label="Experience" value={`${profile.experience} years`} />
+            <ReviewItem label="Game/Sport" value={(Array.isArray(profile.sports) && profile.sports.length ? profile.sports.join(', ') : profile.sport) || '—'} />
+            <ReviewItem label="Registration Type" value={roleLabel} />
+          </div>
+          <button type="button" className="btn btn-secondary staff-profile-logout" onClick={onLogout}>Logout</button>
+        </section>
+
+        <section className="form-section staff-profile-section">
+          <div className="staff-bank-heading">
+            <FormSectionTitle number="02" title="Bank Details" />
+            <button type="button" className="btn btn-secondary" onClick={openBankEditor}>
+              {profile.bankDetails?.accountNumber ? 'Edit Bank Details' : 'Add Bank Details'}
+            </button>
+          </div>
+          {profile.bankDetails?.accountNumber ? (
+            <div className="review-grid staff-bank-details">
+              <ReviewItem label="Account Holder Name" value={profile.bankDetails.accountHolderName} />
+              <ReviewItem label="Bank Name" value={profile.bankDetails.bankName} />
+              <ReviewItem label="Account Number" value={maskBankAccountNumber(profile.bankDetails.accountNumber)} />
+              <ReviewItem label="IFSC Code" value={profile.bankDetails.ifscCode} />
+              <ReviewItem label="Bank Mobile Number" value={profile.bankDetails.mobileNumber} />
+            </div>
+          ) : <p className="form-section-note">Bank details not added yet.</p>}
+        </section>
+
+        <section className="form-section staff-profile-section">
+          <FormSectionTitle number="03" title="Tournament applications" />
+          {notice && <div className="form-alert" role="alert">{notice}</div>}
+          <div className="staff-tournament-grid">
+            {tournaments.length ? tournaments.map((tournament) => {
+              const application = applications.find((item) => (
+                item.tournamentId === tournament.id && item.applicantId === profile.id && item.role === profile.role
+              ));
+              const image = tournament.image || tournament.coverImage || tournament.posterImage;
+              return (
+                <article key={tournament.id} className="staff-tournament-card">
+                  {image
+                    ? <img className="staff-tournament-image" src={image} alt={`${tournament.name} tournament`} />
+                    : <div className="staff-tournament-image staff-tournament-image-fallback" aria-hidden="true" />}
+                  <div className="staff-tournament-card-content">
+                    <span className="section-kicker">{tournament.sport || 'General'}</span>
+                    <h3>{tournament.name}</h3>
+                    <div className="staff-tournament-card-footer">
+                      <span className={`status-pill status-${application?.status || 'available'}`}>
+                        {application?.status || 'Not applied'}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-primary staff-tournament-apply"
+                        onClick={() => handleApply(tournament)}
+                        disabled={Boolean(application)}
+                      >
+                        Select Tournament for {roleLabel}
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              );
+            }) : <p className="admin-cell-muted">No tournaments are currently available for your selected sports.</p>}
+          </div>
+        </section>
+      </main>
+      {bankEditorOpen && (
+        <div className="review-modal-backdrop">
+          <section className="review-modal staff-bank-modal" role="dialog" aria-modal="true" aria-labelledby="staff-bank-title">
+            <button type="button" className="modal-close" onClick={() => setBankEditorOpen(false)} aria-label="Close bank details">×</button>
+            <span className="section-kicker">{roleLabel.toUpperCase()} PROFILE</span>
+            <h2 id="staff-bank-title">{profile.bankDetails?.accountNumber ? 'UPDATE BANK DETAILS' : 'ADD BANK DETAILS'}</h2>
+            <form className="form-grid two" onSubmit={saveBankDetails} noValidate>
+              <Field label="Bank Name" value={bankForm.bankName} onChange={(value) => setBankForm((current) => ({ ...current, bankName: value }))} placeholder="Enter bank name" error={bankErrors.bankName} required />
+              <Field label="Account Holder Name" value={bankForm.accountHolderName} onChange={(value) => setBankForm((current) => ({ ...current, accountHolderName: value }))} placeholder="Name on bank account" error={bankErrors.accountHolderName} required />
+              <Field label="Bank Account Number" value={bankForm.accountNumber} onChange={(value) => setBankForm((current) => ({ ...current, accountNumber: value.replace(/\D/g, '').slice(0, 18) }))} placeholder="9–18 digits" error={bankErrors.accountNumber} required inputMode="numeric" maxLength={18} />
+              <Field label="IFSC Code" value={bankForm.ifscCode} onChange={(value) => setBankForm((current) => ({ ...current, ifscCode: value.replace(/[^a-z\d]/gi, '').toUpperCase().slice(0, 11) }))} placeholder="e.g. SBIN0001234" error={bankErrors.ifscCode} required maxLength={11} />
+              <Field label="Bank Mobile Number" value={bankForm.mobileNumber} onChange={(value) => setBankForm((current) => ({ ...current, mobileNumber: value.replace(/\D/g, '').slice(0, 10) }))} placeholder="10-digit Indian mobile" error={bankErrors.mobileNumber} required inputMode="numeric" maxLength={10} />
+              <div className="staff-bank-form-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setBankEditorOpen(false)} disabled={isSavingBankDetails}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={isSavingBankDetails}>{isSavingBankDetails ? 'SAVING...' : 'Save Changes'}</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+      <Toast toast={bankToast} onDismiss={() => setBankToast(null)} />
+      <Footer />
+    </div>
+  );
 }
 
 const defaultOpeningHours = () => ({
@@ -511,7 +1138,7 @@ function TurfOwnerRegistration() {
           form.turfLength ? `${form.turfLength} ${form.turfSizeUnit}` : '',
           form.turfWidth ? `${form.turfWidth} ${form.turfSizeUnit}` : '',
           form.playingAreas ? `${form.playingAreas} playing area${Number(form.playingAreas) > 1 ? 's' : ''}` : '',
-        ].filter(Boolean).join(' Ã— '),
+        ].filter(Boolean).join(' × '),
         sports: form.sports,
         games: form.sports,
         facilities: form.facilities,
@@ -635,7 +1262,7 @@ function TurfOwnerRegistration() {
 }
 
 function TurfReviewModal({ form, onClose, onConfirm }) {
-  return <div className="review-modal-backdrop"><section className="review-modal"><button type="button" className="modal-close" onClick={onClose}>Ã—</button><span className="section-kicker">REVIEW TURF REGISTRATION</span><h2>FINAL CHECK</h2><div className="review-grid"><ReviewItem label="Owner Name" value={form.ownerName} /><ReviewItem label="Mobile" value={form.ownerMobile} /><ReviewItem label="Email" value={form.ownerEmail} /><ReviewItem label="Owner Address" value={`${form.ownerHouse}, ${form.ownerStreet}, ${form.ownerCity}, ${form.ownerState}`} /><ReviewItem label="Turf Name" value={form.turfName} /><ReviewItem label="Description" value={form.turfDescription} /><ReviewItem label="Sport(s)" value={form.sports.join(' â€¢ ')} /><ReviewItem label="Facilities" value={form.facilities.join(' â€¢ ')} /><ReviewItem label="Opening Hours" value={formatOpeningHours(form.openingHours)} /><ReviewItem label="Turf Address" value={`${form.turfHouse}, ${form.turfStreet}, ${form.turfArea || form.turfCity}, ${form.turfCity}`} /><ReviewItem label="Contact" value={form.contactNumber || form.ownerMobile} /><ReviewItem label="Primary Image" value={form.primaryImage ? 'Uploaded' : 'Not uploaded'} /></div><div className="review-actions"><button type="button" className="btn btn-secondary" onClick={onClose}>Edit</button><button type="button" className="btn btn-primary" onClick={onConfirm}>Register Turf</button></div></section></div>;
+  return <div className="review-modal-backdrop"><section className="review-modal"><button type="button" className="modal-close" onClick={onClose}>×</button><span className="section-kicker">REVIEW TURF REGISTRATION</span><h2>FINAL CHECK</h2><div className="review-grid"><ReviewItem label="Owner Name" value={form.ownerName} /><ReviewItem label="Mobile" value={form.ownerMobile} /><ReviewItem label="Email" value={form.ownerEmail} /><ReviewItem label="Owner Address" value={`${form.ownerHouse}, ${form.ownerStreet}, ${form.ownerCity}, ${form.ownerState}`} /><ReviewItem label="Turf Name" value={form.turfName} /><ReviewItem label="Description" value={form.turfDescription} /><ReviewItem label="Sport(s)" value={form.sports.join(' â€¢ ')} /><ReviewItem label="Facilities" value={form.facilities.join(' â€¢ ')} /><ReviewItem label="Opening Hours" value={formatOpeningHours(form.openingHours)} /><ReviewItem label="Turf Address" value={`${form.turfHouse}, ${form.turfStreet}, ${form.turfArea || form.turfCity}, ${form.turfCity}`} /><ReviewItem label="Contact" value={form.contactNumber || form.ownerMobile} /><ReviewItem label="Primary Image" value={form.primaryImage ? 'Uploaded' : 'Not uploaded'} /></div><div className="review-actions"><button type="button" className="btn btn-secondary" onClick={onClose}>Edit</button><button type="button" className="btn btn-primary" onClick={onConfirm}>Register Turf</button></div></section></div>;
 }
 
 function TurfRegistrationSuccess() {
@@ -646,14 +1273,45 @@ function TurfRegistrationSuccess() {
   return <div className="player-app registration-page"><GlobalHeader /><main className="registration-main container"><div className="registration-heading"><span className="section-kicker">TURF REGISTRATION</span><h1>TURF REGISTERED SUCCESSFULLY</h1><p>Your turf has been successfully registered.</p></div><section className="form-section"><div className="review-grid"><ReviewItem label="Turf Name" value={turf?.turfName || 'Registered turf'} /><ReviewItem label="Owner" value={turf?.ownerName || 'Owner'} /><ReviewItem label="Turf Login Email" value={turf?.turfEmail || turf?.ownerEmail || 'Not available'} /><ReviewItem label="Location" value={turf?.location || turf?.turfAddress?.city || 'Vadodara'} /><ReviewItem label="Sports" value={turf?.sports?.join(' â€¢ ') || 'Cricket'} /><ReviewItem label="Status" value={turf?.registrationStatus || 'Registered'} /></div><p className="form-section-note">Use this Turf Login Email with your owner password to access the Turf Owner Dashboard.</p>{turf && <div style={{ marginTop: '26px' }}><button type="button" className="btn btn-primary" onClick={() => navigate(`/turf-owner/dashboard?turfId=${turf.id}`)}>Open Owner Dashboard</button></div>}</section></main><Footer /></div>;
 }
 
-function LoginPage({ onLogin }) {
+function LoginPage({ onLogin, isModal = false }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState(ROLES.PLAYER);
   const [error, setError] = useState('');
-  const [showDemo, setShowDemo] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const redirectAfterLogin = (nextSession) => {
+    const pendingTeamRegistration = (() => {
+      try {
+        const value = JSON.parse(sessionStorage.getItem('cliftPendingTournamentRegistration') || 'null');
+        return Date.now() - Number(value?.createdAt || 0) < 30 * 60 * 1000 ? value : null;
+      } catch {
+        return null;
+      }
+    })();
+    const pendingInterest = (() => {
+      try {
+        if (!('sessionStorage' in globalThis)) return null;
+        return JSON.parse(sessionStorage.getItem('cliftPendingInterest') || 'null');
+      } catch {
+        return null;
+      }
+    })();
+
+    if (nextSession.role === ROLES.PLAYER && pendingTeamRegistration?.returnPath) {
+      navigate(pendingTeamRegistration.returnPath);
+      return;
+    }
+
+    if (nextSession.role === ROLES.PLAYER && pendingInterest?.returnPath) {
+      navigate(pendingInterest.returnPath);
+      return;
+    }
+
+    if ('sessionStorage' in globalThis) sessionStorage.removeItem('cliftPendingInterest');
+    navigate(dashboardPathForRole(nextSession.role));
+  };
 
   const submit = async (event) => {
     event?.preventDefault();
@@ -690,7 +1348,7 @@ function LoginPage({ onLogin }) {
         setSession(nextSession);
         onLogin(nextSession);
         setIsSubmitting(false);
-        navigate(dashboardPathForRole(nextSession.role));
+        redirectAfterLogin(nextSession);
         return;
       }
 
@@ -700,7 +1358,14 @@ function LoginPage({ onLogin }) {
         return;
       }
 
-      const action = role === ROLES.PLAYER ? 'loginPlayer' : role === ROLES.TURF_OWNER ? 'loginTurfOwner' : 'loginAdmin';
+      const loginActions = {
+        [ROLES.PLAYER]: 'loginPlayer',
+        [ROLES.TURF_OWNER]: 'loginTurfOwner',
+        [ROLES.SCORER]: 'loginScorer',
+        [ROLES.COACH]: 'loginCoach',
+        [ROLES.ADMIN]: 'loginAdmin',
+      };
+      const action = loginActions[role];
       const result = await apiRequest({ action, email: normalizedEmail, password });
 
       if (!result?.success) {
@@ -711,10 +1376,11 @@ function LoginPage({ onLogin }) {
           setSession(nextSession);
           onLogin(nextSession);
           setIsSubmitting(false);
-          navigate(dashboardPathForRole(nextSession.role));
+          redirectAfterLogin(nextSession);
           return;
         }
-        setError(result?.message || fallback.error || 'Invalid email or password.');
+        const unsupportedAction = /^invalid action:/i.test(String(result?.message || ''));
+        setError(unsupportedAction ? fallback.error : (result?.message || fallback.error || 'Invalid email or password.'));
         setIsSubmitting(false);
         return;
       }
@@ -737,7 +1403,7 @@ function LoginPage({ onLogin }) {
       setSession(nextSession);
       onLogin(nextSession);
       setIsSubmitting(false);
-      navigate(dashboardPathForRole(nextSession.role));
+      redirectAfterLogin(nextSession);
     } catch (error) {
       const fallback = authenticateUser(role, normalizedEmail, password);
       if (fallback.ok) {
@@ -746,24 +1412,27 @@ function LoginPage({ onLogin }) {
         setSession(nextSession);
         onLogin(nextSession);
         setIsSubmitting(false);
-        navigate(dashboardPathForRole(nextSession.role));
+        redirectAfterLogin(nextSession);
         return;
       }
-      setError(error?.message || fallback.error || 'Unable to connect to the backend. Please try again.');
+      const errorMessage = String(error?.message || '');
+      const unsupportedAction = /^invalid action:/i.test(errorMessage);
+      setError(unsupportedAction ? fallback.error : (errorMessage || fallback.error || 'Unable to connect to the backend. Please try again.'));
       setIsSubmitting(false);
     }
   };
 
   return (
-    <AuthFrame eyebrow="WELCOME BACK" title="LOGIN TO YOUR GAME." text="Sign in as a player, turf owner or admin.">
+    <AuthFrame eyebrow="WELCOME BACK" title="LOGIN TO YOUR GAME." text="Sign in with your player, turf owner, coach, scorer or admin account." isModal={isModal}>
       <form className="auth-form" onSubmit={submit}>
         <label className="form-field">
           <span>Login As<b>*</b></span>
-          <select value={role} onChange={(event) => setRole(event.target.value)} required aria-label="Login as account type">
-            {LOGIN_ROLES.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
+          <ResponsiveSelect
+            value={role}
+            options={LOGIN_ROLES}
+            onChange={setRole}
+            ariaLabel="Login as account type"
+          />
         </label>
 
         <Field
@@ -783,7 +1452,7 @@ function LoginPage({ onLogin }) {
               type={showPassword ? 'text' : 'password'}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="Enter your demo password"
+              placeholder="Enter your password"
               required
               autoComplete="current-password"
               aria-label="Password"
@@ -805,8 +1474,6 @@ function LoginPage({ onLogin }) {
         </button>
       </form>
 
-      <button type="button" className="demo-hint-toggle" onClick={() => setShowDemo((value) => !value)}>{showDemo ? 'Hide' : 'Show'} demo accounts</button>
-      {showDemo && <div className="demo-hint"><strong>Player</strong><span>dev.player@demo.com / demo123</span><strong>Turf owner</strong><span>united-sports-arena@owner.demo / owner123</span><strong>Admin</strong><span>admin@clift.demo / admin123</span></div>}
       <p className="auth-footer-note">New here? <button type="button" onClick={() => navigate('/signup')}>Choose registration</button></p>
     </AuthFrame>
   );
@@ -818,13 +1485,47 @@ function PlayerRegistration({ onCreated }) {
   const [step, setStep] = useState(1);
   const [review, setReview] = useState(false);
   const [photoError, setPhotoError] = useState('');
+  const [turfSearch, setTurfSearch] = useState('');
   const submissionLock = useRef(false);
 
   const compatibleTurfs = useMemo(() => getAllTurfs().filter((turf) => (
     form.selectedTurfIds.includes(turf.id)
     || form.sports.some((sportName) => turfSupportsSport(turf, sportName))
   )), [form.selectedTurfIds, form.sports]);
+  const searchedTurfs = compatibleTurfs.filter((turf) => (
+    String(turf.name || '').toLowerCase().includes(turfSearch.trim().toLowerCase())
+  ));
   const age = calculateAge(form.dob);
+  const redirectAfterPlayerRegistration = (nextSession) => {
+    const pending = (() => {
+      try {
+        return JSON.parse(sessionStorage.getItem('cliftPendingInterest') || 'null');
+      } catch {
+        return null;
+      }
+    })();
+    const pendingTeamRegistration = (() => {
+      try {
+        const value = JSON.parse(sessionStorage.getItem('cliftPendingTournamentRegistration') || 'null');
+        return Date.now() - Number(value?.createdAt || 0) < 30 * 60 * 1000 ? value : null;
+      } catch {
+        return null;
+      }
+    })();
+
+    if (pendingTeamRegistration?.returnPath && nextSession.role === ROLES.PLAYER) {
+      navigate(pendingTeamRegistration.returnPath);
+      return;
+    }
+
+    if (pending?.returnPath && nextSession.role === ROLES.PLAYER) {
+      navigate(pending.returnPath);
+      return;
+    }
+
+    sessionStorage.removeItem('cliftPendingInterest');
+    navigate('/player/dashboard');
+  };
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const toggleGame = (sportName) => setForm((current) => {
     const selected = current.sports.includes(sportName)
@@ -846,7 +1547,7 @@ function PlayerRegistration({ onCreated }) {
 
   const handleReviewSubmit = async () => {
     setReview(false);
-    await submit({ preventDefault: () => {}, skipPayment: true });
+    await submit({ preventDefault: () => {} });
   };
 
   const validate = () => {
@@ -917,7 +1618,7 @@ function PlayerRegistration({ onCreated }) {
         setSession(fallbackResult.session);
         applySuccessfulSession(fallbackResult.session, ROLES.PLAYER, fallbackResult.player);
         onCreated?.(fallbackResult.session);
-        navigate('/player/dashboard');
+        redirectAfterPlayerRegistration(fallbackResult.session);
         return true;
       };
 
@@ -1055,7 +1756,7 @@ function PlayerRegistration({ onCreated }) {
       applySuccessfulSession(nextSession, ROLES.PLAYER, player);
       setSession(nextSession);
       onCreated(nextSession);
-      navigate('/player/dashboard');
+      redirectAfterPlayerRegistration(nextSession);
     } catch (error) {
       const fallbackState = getDemoState();
       const fallback = createDemoPlayerRegistration(fallbackState, {
@@ -1104,10 +1805,23 @@ function PlayerRegistration({ onCreated }) {
             })}</div>
             {errors.sportId && <InlineError>{errors.sportId}</InlineError>}
           </section>
+          <div className="registration-turf-search" role="search">
+            <span className="registration-turf-search-icon" aria-hidden="true" />
+            <input
+              type="text"
+              value={turfSearch}
+              onChange={(event) => setTurfSearch(event.target.value)}
+              placeholder="Search turf..."
+              aria-label="Search turfs by name"
+            />
+            {turfSearch && (
+              <button type="button" className="registration-turf-search-clear" onClick={() => setTurfSearch('')} aria-label="Clear turf search" />
+            )}
+          </div>
           <section className="form-section">
             <FormSectionTitle number="04" title="Select Your Preferred Turfs" />
             <p className="form-section-note">Turfs compatible with at least one selected game{form.sports.length ? `: ${form.sports.join(', ')}` : ''} are shown.</p>
-            {form.sports.length ? <div className="registration-turf-grid">{compatibleTurfs.map((turf) => <TurfCard turf={turf} selected={form.selectedTurfIds.includes(turf.id)} onSelect={() => toggleTurf(turf.id)} key={turf.id} selectLabel="Select Turf" />)}</div> : <div className="form-empty">Choose one or more games to see compatible Vadodara turfs.</div>}
+            {form.sports.length ? searchedTurfs.length ? <div className="registration-turf-grid">{searchedTurfs.map((turf) => <TurfCard turf={turf} selected={form.selectedTurfIds.includes(turf.id)} onSelect={() => toggleTurf(turf.id)} key={turf.id} selectLabel="Select Turf" />)}</div> : <div className="form-empty">No turfs found.</div> : <div className="form-empty">Choose one or more games to see compatible Vadodara turfs.</div>}
             {errors.selectedTurfId && <InlineError>{errors.selectedTurfId}</InlineError>}
           </section>
           <section className="form-section"><FormSectionTitle number="05" title="Profile Photo" /><div className="photo-upload"><div className="photo-preview">{form.profileImage ? <img src={form.profileImage} alt="Player preview" /> : <span>VS</span>}</div><div><label className="upload-button btn btn-secondary">{form.profileImage ? 'Change Photo' : 'Upload Profile Photo'}<input type="file" accept="image/*" onChange={handlePhoto} /></label>{form.profileImage && <button type="button" className="text-button danger" onClick={() => update('profileImage', '')}>Remove photo</button>}<p>JPG, PNG, WEBP or GIF. Optional.</p>{photoError && <InlineError>{photoError}</InlineError>}</div></div></section>
@@ -1127,10 +1841,6 @@ function ReviewModal({ form, age, onClose, onSubmit }) {
   return <div className="review-modal-backdrop"><section className="review-modal"><button type="button" className="modal-close" onClick={onClose}>×</button><span className="section-kicker">FINAL CHECK</span><h2>REVIEW YOUR DETAILS.</h2><div className="review-grid"><ReviewItem label="Player" value={`${form.firstName} ${form.surname}`} /><ReviewItem label="Date of Birth" value={formatDate(form.dob)} /><ReviewItem label="Age" value={`${age} years`} /><ReviewItem label="Games" value={selectedGames.join(', ')} /><ReviewItem label="Mobile" value={form.mobile} /><ReviewItem label="Email" value={form.email} /><ReviewItem label="Address" value={`${form.house}, ${form.street}, Vadodara`} /><ReviewItem label="Selected Turfs" value={selectedTurfs.map((turf) => turf.name).join(', ')} /></div><div className="review-actions"><button type="button" className="btn btn-secondary" onClick={onClose}>Edit Details</button><button type="button" className="btn btn-primary" onClick={onSubmit}>Create Player Profile</button></div></section></div>;
 }
 
-function PaymentModal({ onPaid, onPayLater, onClose }) {
-  return <div className="review-modal-backdrop"><section className="review-modal payment-modal"><button type="button" className="modal-close" onClick={onClose}>×</button><span className="section-kicker">PLAYER PROFILE PAYMENT</span><h2>Pay ₹200 for Player Profile Creation</h2><div className="player-payment-modal-body"><div className="qr-code player-payment-qr" aria-label="Demo payment QR code" style={{ backgroundImage: `url(${scannerImage})`, backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }} /><div className="player-payment-amount"><strong>Player Profile Creation Fee: ₹200</strong><p>Scan the QR code and complete the payment.</p></div></div><div className="review-actions payment-actions"><button type="button" className="btn btn-primary" onClick={onPaid}>Paid</button><button type="button" className="btn btn-secondary" onClick={onPayLater}>Pay Later</button></div></section></div>;
-}
-
 function PlayerDashboard({ state, session, refresh, logout }) {
   const storedPlayer = resolvePlayerForSession(state, session);
   const [turfQuery, setTurfQuery] = useState('');
@@ -1138,6 +1848,12 @@ function PlayerDashboard({ state, session, refresh, logout }) {
   const selectedGames = getPlayerGames(storedPlayer);
   const selectedTurfIds = getPlayerTurfIds(storedPlayer);
   const player = { ...storedPlayer, sportId: selectedGames.join(', ') || storedPlayer.sportId };
+  const interestedIds = new Set(getPlayerInterestedTournamentIds(storedPlayer));
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const interestedTournaments = getAllTournaments().filter((tournament) => {
+    return interestedIds.has(String(tournament.id)) && isTournamentInterestActive(tournament, today);
+  });
   const playerRequests = state.requests.filter((request) => request.playerId === player.id).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const currentRequest = playerRequests[0];
   const playerBookings = getBookings().filter((booking) => booking.userId === player.id || booking.email === player.email).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
@@ -1165,7 +1881,7 @@ function PlayerDashboard({ state, session, refresh, logout }) {
     document.querySelector('#my-turf-request')?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  return <PlayerShell player={player} active="Dashboard" logout={logout}><main className="dashboard-main container"><section className="dashboard-welcome"><div><span className="section-kicker">PLAYER HOME / VADODARA</span><h1>Welcome back, {player.firstName}.</h1><p>Ready for your next game?</p></div><img className="dashboard-avatar" src={player.profileImage || ''} alt={player.profileImage ? `${player.firstName} profile` : ''} onError={(event) => { event.currentTarget.style.display = 'none'; }} />{!player.profileImage && <span className="dashboard-avatar fallback">{player.firstName.slice(0, 1)}{player.surname.slice(0, 1)}</span>}</section><section className="dashboard-summary-grid"><article className="player-summary-card"><div className="summary-profile"><span className="large-avatar">{player.firstName.slice(0, 1)}{player.surname.slice(0, 1)}</span><div><h2>{player.firstName} {player.surname}</h2><p>{player.sportId} Player Â· {player.age} Years</p><span>Vadodara</span></div></div><div className="summary-turf"><span className="section-kicker">SELECTED TURF</span><strong>{selectedTurf?.name || 'Not Selected'}</strong><span>{selectedTurf?.area || 'Choose a turf'}{selectedTurf ? ', Vadodara' : ''}</span></div><div className="summary-request"><span className="section-kicker">REQUEST</span><StatusPill status={currentRequest?.status || 'not selected'} /></div><button type="button" className="link-button" onClick={() => navigate('/player/profile')}>View Profile</button></article><RequestCard request={currentRequest} /></section><section className="dashboard-columns"><section className="dashboard-block"><SectionHeading kicker="UPCOMING MATCHES" title="YOUR NEXT GAMES." /><div className="match-list">{matches.filter((match) => match.status === 'upcoming').length ? matches.filter((match) => match.status === 'upcoming').map((match) => <MatchCard key={match.id} match={match} />) : <EmptyState title="No upcoming matches" text="Your next match will appear here." />}</div></section><section className="dashboard-block"><SectionHeading kicker="LIVE NOW" title="YOUR SPORT, RIGHT NOW." /><div className="match-list">{matches.filter((match) => match.status === 'live').length ? matches.filter((match) => match.status === 'live').map((match) => <MatchCard key={match.id} match={match} />) : <EmptyState title="No live matches right now" text="Your next match will appear here when available." />}</div></section></section><section className="dashboard-block"><SectionHeading kicker={`${player.sportId.toUpperCase()} TOURNAMENTS`} title="OPPORTUNITIES TO COMPETE." /><div className="mini-tournament-grid">{playerTournaments.length ? playerTournaments.map((tournament) => <article className="mini-tournament" key={tournament.id}><img src={tournament.image} alt={`${tournament.sport} tournament`} /><div><span className="section-kicker">{tournament.sport}</span><h3>{tournament.name}</h3><p>{tournament.dateLabel} Â· {tournament.venueName}</p><button type="button" className="link-button" onClick={() => navigate(`/tournaments/${tournament.id}`)}>View Tournament</button></div></article>) : <EmptyState title="No upcoming tournaments for your selected sport." text="Choose another sport from your profile when your game changes." />}</div></section><section className="dashboard-block" id="find-turf"><div className="find-turf-heading"><SectionHeading kicker="VADODARA TURFS" title="FIND YOUR TURF." /><input className="dashboard-search" value={turfQuery} onChange={(event) => setTurfQuery(event.target.value)} placeholder="Search turf or area..." aria-label="Search turf" /></div><p className="dashboard-subtitle">Showing turfs compatible with {player.sportId}.</p><div className="dashboard-turf-grid">{compatibleTurfs.map((turf) => <TurfCard key={turf.id} turf={turf} selected={turf.id === player.selectedTurfId} requestStatus={playerRequests.find((request) => request.turfId === turf.id)?.status} onSelect={() => sendRequest(turf)} selectLabel={turf.id === player.selectedTurfId ? 'Current Turf' : 'Send Joining Request'} />)}</div></section><section className="dashboard-block request-history"><SectionHeading kicker="MY TURF REQUEST" title="REQUEST HISTORY." />{playerRequests.length ? playerRequests.map((request) => <RequestHistoryItem key={request.id} request={request} />) : <EmptyState title="Choose a turf to send your first joining request." text="Your request history will appear here." />}</section></main></PlayerShell>;
+  return <PlayerShell player={player} active="Dashboard" logout={logout}><main className="dashboard-main container"><section className="dashboard-welcome"><div><span className="section-kicker">PLAYER HOME / VADODARA</span><h1>Welcome back, {player.firstName}.</h1><p>Ready for your next game?</p></div></section><section className="dashboard-summary-grid"><article className="player-summary-card"><div className="summary-profile"><span className="large-avatar">{player.firstName.slice(0, 1)}{player.surname.slice(0, 1)}</span><div><h2>{player.firstName} {player.surname}</h2><p>{player.sportId} Player · {player.age} Years</p><span>Vadodara</span></div></div><div className="summary-turf"><span className="section-kicker">SELECTED TURF</span><strong>{selectedTurf?.name || 'Not Selected'}</strong><span>{selectedTurf?.area || 'Choose a turf'}{selectedTurf ? ', Vadodara' : ''}</span></div><button type="button" className="link-button" onClick={() => navigate('/player/profile')}>View Profile</button></article><RequestCard request={currentRequest} /></section><section className="dashboard-columns"><section className="dashboard-block"><SectionHeading kicker="UPCOMING MATCHES" title="YOUR NEXT GAMES." /><div className="match-list">{matches.filter((match) => match.status === 'upcoming').length ? matches.filter((match) => match.status === 'upcoming').map((match) => <MatchCard key={match.id} match={match} />) : <EmptyState title="No upcoming matches" text="Your next match will appear here." />}</div></section><section className="dashboard-block"><SectionHeading kicker="LIVE NOW" title="YOUR SPORT, RIGHT NOW." /><div className="match-list">{matches.filter((match) => match.status === 'live').length ? matches.filter((match) => match.status === 'live').map((match) => <MatchCard key={match.id} match={match} />) : <EmptyState title="No live matches right now" text="Your next match will appear here when available." />}</div></section></section><section className="dashboard-block"><SectionHeading kicker={`${player.sportId.toUpperCase()} TOURNAMENTS`} title="OPPORTUNITIES TO COMPETE." /><div className="mini-tournament-grid">{playerTournaments.length ? playerTournaments.map((tournament) => <article className="mini-tournament" key={tournament.id}><img src={tournament.image} alt={`${tournament.sport} tournament`} /><div><span className="section-kicker">{tournament.sport}</span><h3>{tournament.name}</h3><p>{tournament.dateLabel} · {tournament.venueName}</p><button type="button" className="link-button" onClick={() => navigate(`/tournaments/${tournament.id}`)}>View Tournament</button></div></article>) : <EmptyState title="No upcoming tournaments for your selected sport." text="Choose another sport from your profile when your game changes." />}</div></section><section className="dashboard-block"><SectionHeading kicker="SAVED FOR LATER" title="INTERESTED TOURNAMENTS." /><div className="mini-tournament-grid">{interestedTournaments.length ? interestedTournaments.map((tournament) => <article className="mini-tournament" key={tournament.id}><img src={tournament.image} alt={`${tournament.sport} tournament`} /><div><span className="section-kicker">{tournament.sport}</span><h3>{tournament.name}</h3><p>{tournament.dateLabel} · {tournament.venueName}</p><button type="button" className="link-button" onClick={() => navigate(`/tournaments/${tournament.id}`)}>View Tournament</button></div></article>) : <EmptyState title="No interested tournaments yet" text="Select “I’m Interested” on a tournament to save it here." />}</div></section><section className="dashboard-block" id="find-turf"><div className="find-turf-heading"><SectionHeading kicker="VADODARA TURFS" title="FIND YOUR TURF." /><input className="dashboard-search" value={turfQuery} onChange={(event) => setTurfQuery(event.target.value)} placeholder="Search turf or area..." aria-label="Search turf" /></div><p className="dashboard-subtitle">Showing turfs compatible with {player.sportId}.</p><div className="dashboard-turf-grid">{compatibleTurfs.map((turf) => <TurfCard key={turf.id} turf={turf} selected={turf.id === player.selectedTurfId} requestStatus={playerRequests.find((request) => request.turfId === turf.id)?.status} onSelect={() => sendRequest(turf)} selectLabel={turf.id === player.selectedTurfId ? 'Current Turf' : 'Send Joining Request'} />)}</div></section><section className="dashboard-block request-history"><SectionHeading kicker="TURF REQUESTS" title="REQUEST HISTORY." />{playerRequests.length ? playerRequests.map((request) => <RequestHistoryItem key={request.id} request={request} />) : <EmptyState title="Choose a turf to send your first joining request." text="Your request history will appear here." />}</section></main></PlayerShell>;
 }
 
 function ProfilePage({ state, session, refresh, logout }) {
@@ -1187,7 +1903,7 @@ function ProfilePage({ state, session, refresh, logout }) {
 }
 
 function PlayerBookingStatuses({ bookings }) {
-  return <section className="dashboard-block player-bookings"><SectionHeading kicker="MY BOOKINGS" title="YOUR TURF RESERVATIONS." />{bookings.length ? <div className="owner-record-list">{bookings.map((booking) => <article className="owner-record" key={booking.bookingId}><div><h3>{booking.turfName}</h3><p>{booking.game} Â· {formatDate(booking.bookingDate)} Â· {booking.fromTime} to {booking.toTime}</p><small>{booking.bookingId}</small></div><StatusPill status={booking.bookingStatus} /></article>)}</div> : <EmptyState title="No bookings yet" text="Your turf reservations will appear here." />}</section>;
+  return <section className="dashboard-block player-bookings"><SectionHeading kicker="MY BOOKINGS" title="YOUR TURF RESERVATIONS." />{bookings.length ? <div className="owner-record-list">{bookings.map((booking) => <article className="owner-record" key={booking.bookingId}><div><h3>{booking.turfName}</h3><p>{booking.game} · {formatDate(booking.bookingDate)} · {booking.fromTime} to {booking.toTime}</p><small>{booking.bookingId}</small></div><StatusPill status={booking.bookingStatus} /></article>)}</div> : <EmptyState title="No bookings yet" text="Your turf reservations will appear here." />}</section>;
 }
 
 function OwnerDashboard({ state, session, refresh, logout }) {
@@ -1204,17 +1920,17 @@ function OwnerDashboard({ state, session, refresh, logout }) {
     refresh();
   };
   if (!owner || !ownerTurf) return <ProtectedMessage role="turf owner" />;
-  return <div className="player-app owner-page"><AppTopbar label="TURF OWNER WORKSPACE" onLogout={logout} /><main className="dashboard-main container"><div className="page-title-row"><div><span className="section-kicker">SPECIFIC TURF OWNER</span><h1>{ownerTurf.name}.</h1><p>Review joining requests for {ownerTurf.area}, Vadodara.</p></div><div className="owner-badge">OWNER VIEW</div></div><section className="owner-venue-banner"><img src={ownerTurf.image} alt={ownerTurf.name} /><div><span className="section-kicker">YOUR VENUE</span><h2>{ownerTurf.name}</h2><p>{ownerTurf.area}, Vadodara Â· {ownerTurf.sports.join(' Â· ')}</p></div></section><section className="dashboard-block owner-requests"><SectionHeading kicker="PLAYER REQUESTS" title="WHO WANTS TO PLAY HERE." />{requests.length ? requests.map((request) => <OwnerRequest key={request.id} request={request} player={state.players.find((item) => item.id === request.playerId)} turf={ownerTurf} onRespond={respond} />) : <EmptyState title="No joining requests yet" text="Requests for this specific turf will appear here." />}</section></main></div>;
+  return <div className="player-app owner-page"><AppTopbar label="TURF OWNER WORKSPACE" onLogout={logout} /><main className="dashboard-main container"><div className="page-title-row"><div><span className="section-kicker">SPECIFIC TURF OWNER</span><h1>{ownerTurf.name}.</h1><p>Review joining requests for {ownerTurf.area}, Vadodara.</p></div><div className="owner-badge">OWNER VIEW</div></div><section className="owner-venue-banner"><img src={ownerTurf.image} alt={ownerTurf.name} /><div><span className="section-kicker">YOUR VENUE</span><h2>{ownerTurf.name}</h2><p>{ownerTurf.area}, Vadodara · {ownerTurf.sports.join(' · ')}</p></div></section><section className="dashboard-block owner-requests"><SectionHeading kicker="PLAYER REQUESTS" title="WHO WANTS TO PLAY HERE." />{requests.length ? requests.map((request) => <OwnerRequest key={request.id} request={request} player={state.players.find((item) => item.id === request.playerId)} turf={ownerTurf} onRespond={respond} />) : <EmptyState title="No joining requests yet" text="Requests for this specific turf will appear here." />}</section></main></div>;
 }
 
 function OwnerRequest({ request, player, turf, onRespond }) {
   if (!player) return null;
-  return <article className="owner-request"><div className="large-avatar">{player.firstName.slice(0, 1)}{player.surname.slice(0, 1)}</div><div className="owner-request-main"><span className="section-kicker">PLAYER REQUEST</span><h3>{player.firstName} {player.surname}</h3><p>{player.age} years Â· {player.sportId} Â· Registered {new Date(player.createdAt).toLocaleDateString('en-IN')}</p><span>{turf.name} Â· {turf.area}</span></div><div className="owner-request-actions"><StatusPill status={request.status} />{request.status === 'pending' && <><button type="button" className="btn btn-primary" onClick={() => onRespond(request.id, 'accepted')}>Accept</button><button type="button" className="btn btn-secondary" onClick={() => onRespond(request.id, 'rejected')}>Reject</button></>}</div></article>;
+  return <article className="owner-request"><div className="large-avatar">{player.firstName.slice(0, 1)}{player.surname.slice(0, 1)}</div><div className="owner-request-main"><span className="section-kicker">PLAYER REQUEST</span><h3>{player.firstName} {player.surname}</h3><p>{player.age} years · {player.sportId} · Registered {new Date(player.createdAt).toLocaleDateString('en-IN')}</p><span>{turf.name} · {turf.area}</span></div><div className="owner-request-actions"><StatusPill status={request.status} />{request.status === 'pending' && <><button type="button" className="btn btn-primary" onClick={() => onRespond(request.id, 'accepted')}>Accept</button><button type="button" className="btn btn-secondary" onClick={() => onRespond(request.id, 'rejected')}>Reject</button></>}</div></article>;
 }
 
 function PlayerShell({ player, active, logout, children }) {
   const [open, setOpen] = useState(false);
-  return <div className="player-app dashboard-app"><AppTopbar player={player} onLogout={logout} onMenu={() => setOpen((value) => !value)} /><div className={`dashboard-frame ${open ? 'nav-open' : ''}`}><aside className="dashboard-sidebar"><div className="sidebar-profile"><span className="large-avatar">{player.firstName.slice(0, 1)}{player.surname.slice(0, 1)}</span><strong>{player.firstName} {player.surname}</strong><span>{player.sportId} Player</span></div><nav>{appNav.map((item) => <button type="button" className={active === item.label ? 'active' : ''} onClick={() => navigate(item.href.split('#')[0])} key={item.label}>{item.label}</button>)}</nav><button type="button" className="sidebar-logout" onClick={logout}>Logout</button></aside><div className="dashboard-content">{children}{active === 'Dashboard' && <TournamentRegistrationHistory playerId={player.id} />}</div></div></div>;
+  return <div className="player-app dashboard-app"><AppTopbar player={player} onLogout={logout} onMenu={() => setOpen((value) => !value)} /><div className={`dashboard-frame ${open ? 'nav-open' : ''}`}><aside className="dashboard-sidebar"><div className="sidebar-profile"><span className="large-avatar">{player.firstName.slice(0, 1)}{player.surname.slice(0, 1)}</span><strong>{player.firstName} {player.surname}</strong><span>{player.sportId} Player</span></div><nav>{appNav.map((item) => <button type="button" className={active === item.label ? 'active' : ''} onClick={() => { setOpen(false); if (item.href.includes('#')) document.getElementById(item.href.split('#')[1])?.scrollIntoView({ behavior: 'smooth' }); else navigate(item.href); }} key={item.label}>{item.label}</button>)}</nav></aside><div className="dashboard-content">{children}{active === 'Dashboard' && <><PlayerTeams state={getDemoState()} player={player} refresh={() => window.location.reload()} /><TournamentRegistrationHistory playerId={player.id} /></>}</div></div></div>;
 }
 
 function TournamentRegistrationHistory({ playerId }) {
@@ -1225,30 +1941,29 @@ function TournamentRegistrationHistory({ playerId }) {
 }
 
 function AppTopbar({ player, label = 'PLAYER HOME', onLogout, onMenu }) {
-  return <header className="app-topbar dashboard-topbar"><button type="button" className="app-brand" onClick={() => navigate(player ? '/player/dashboard' : '/turf-owner/dashboard')}><span className="brand-mark">VS</span><span>{label}</span></button><div className="dashboard-top-actions">{player && <span className="topbar-user">{player.firstName} {player.surname}</span>}<button type="button" className="mobile-dashboard-menu" onClick={onMenu} aria-label="Toggle dashboard navigation">â˜°</button><button type="button" className="text-button" onClick={onLogout}>Logout</button></div></header>;
+  return <header className="app-topbar dashboard-topbar"><button type="button" className="app-brand" onClick={() => navigate(player ? '/player/dashboard' : '/turf-owner/dashboard')}><span className="brand-mark">VS</span><span>{label}</span></button><div className="dashboard-top-actions"><button type="button" className="mobile-dashboard-menu" onClick={onMenu} aria-label="Toggle dashboard navigation"><AdminIcon name="menu" size={20} /></button><button type="button" className="text-button" onClick={onLogout}>Logout</button></div></header>;
 }
 
 function RequestCard({ request }) {
-  const turf = request ? getTurf(request.turfId) : null;
   const bookings = request ? getBookings().filter((booking) => booking.userId === request.playerId || booking.turfId === request.turfId) : [];
-  return <article className="request-card" id="my-turf-request"><span className="section-kicker">MY TURF REQUEST</span><h2>{turf?.name || 'No turf selected'}</h2><p>{turf ? `${turf.area}, Vadodara` : 'Choose a compatible turf to send your first request.'}</p>{request ? <><div className="request-card-row"><span>{request.sportId}</span><StatusPill status={request.status} /></div><small>Request sent {new Date(request.createdAt).toLocaleDateString('en-IN')}</small>{bookings.length > 0 && <div className="player-booking-statuses"><span className="section-kicker">BOOKING STATUS</span>{bookings.slice(0, 2).map((booking) => <div className="request-card-row" key={booking.bookingId}><span>{booking.game} Â· {formatDate(booking.bookingDate)}</span><StatusPill status={booking.bookingStatus} /></div>)}</div>}</> : <small>Select a turf below to get started.</small>}</article>;
+  return <article className="request-card" id="my-turf-request"><span className="section-kicker">CURRENT TURF CONNECTION</span><h2>{request ? 'Request status' : 'No request yet'}</h2><p>{request ? 'Track your turf connection here.' : 'Choose a compatible turf to send your first request.'}</p>{request ? <><div className="request-card-row"><span>{request.sportId}</span><StatusPill status={request.status} /></div><small>Request sent {new Date(request.createdAt).toLocaleDateString('en-IN')}</small>{bookings.length > 0 && <div className="player-booking-statuses"><span className="section-kicker">BOOKING STATUS</span>{bookings.slice(0, 2).map((booking) => <div className="request-card-row" key={booking.bookingId}><span>{booking.game} · {formatDate(booking.bookingDate)}</span><StatusPill status={booking.bookingStatus} /></div>)}</div>}</> : <small>Select a turf below to get started.</small>}</article>;
 }
 
 function MatchCard({ match }) {
   const tournament = getTournament(match.tournamentId);
   const turf = getTurf(match.turfId);
-  return <article className={`match-card ${match.status === 'live' ? 'live' : ''}`}><div className="match-card-top"><span className="sport-chip">{match.sportId}</span>{match.status === 'live' ? <StatusPill status="live" /> : <span>{match.date}</span>}</div><h3>{tournament?.name}</h3><div className="match-teams"><strong>{match.teams[0]}</strong><span>VS</span><strong>{match.teams[1]}</strong></div><p>{match.status === 'live' ? match.phase : `${match.time} Â· ${turf?.name || 'Vadodara'}`}</p></article>;
+  return <article className={`match-card ${match.status === 'live' ? 'live' : ''}`}><div className="match-card-top"><span className="sport-chip">{match.sportId}</span>{match.status === 'live' ? <StatusPill status="live" /> : <span>{match.date}</span>}</div><h3>{tournament?.name}</h3><div className="match-teams"><strong>{match.teams[0]}</strong><span>VS</span><strong>{match.teams[1]}</strong></div><p>{match.status === 'live' ? match.phase : `${match.time} · ${turf?.name || 'Vadodara'}`}</p></article>;
 }
 
 function TurfCard({ turf, selected, requestStatus, onSelect, selectLabel }) {
   const disabled = selected && requestStatus === 'pending';
   const selectedLabel = requestStatus === 'accepted' ? 'Approved' : requestStatus === 'rejected' ? 'Request Rejected' : requestStatus === 'pending' ? 'Request Pending' : 'Selected';
-  return <article className={`dashboard-turf-card ${selected ? 'selected' : ''}`}><img src={turf.image} alt={turf.name} loading="lazy" /><div className="dashboard-turf-copy"><h3>{turf.name}</h3><p>{turf.area}, Vadodara</p><span>{turf.sports.join(' Â· ')}</span><small>{turf.facilities?.slice(0, 2).join(' Â· ')}{turf.openingHours ? ` Â· ${turf.openingHours}` : ''}</small><button type="button" className={`btn ${selected ? 'btn-secondary' : 'btn-primary'}`} onClick={onSelect} disabled={disabled}>{selected ? selectedLabel : selectLabel}</button></div></article>;
+  return <article className={`dashboard-turf-card ${selected ? 'selected' : ''}`}><img src={turf.image} alt={turf.name} loading="lazy" /><div className="dashboard-turf-copy"><h3>{turf.name}</h3><p>{turf.area}, Vadodara</p><span>{turf.sports.join(' · ')}</span><small>{turf.facilities?.slice(0, 2).join(' · ')}{turf.openingHours ? ` · ${turf.openingHours}` : ''}</small><button type="button" className={`btn ${selected ? 'btn-secondary' : 'btn-primary'}`} onClick={onSelect} disabled={disabled}>{selected ? selectedLabel : selectLabel}</button></div></article>;
 }
 
 function RequestHistoryItem({ request }) {
   const turf = getTurf(request.turfId);
-  return <article className="request-history-item"><div><strong>{turf?.name}</strong><span>{request.sportId} Â· {turf?.area}, Vadodara</span></div><div><small>{new Date(request.createdAt).toLocaleDateString('en-IN')}</small><StatusPill status={request.status} /></div></article>;
+  return <article className="request-history-item"><div><strong>{turf?.name}</strong><span>{request.sportId} · {turf?.area}, Vadodara</span></div><div><small>{new Date(request.createdAt).toLocaleDateString('en-IN')}</small><StatusPill status={request.status} /></div></article>;
 }
 
 function SectionHeading({ kicker, title }) { return <div className="dashboard-section-heading"><span className="section-kicker">{kicker}</span><h2>{title}</h2></div>; }
@@ -1260,6 +1975,6 @@ function StatusPill({ status }) { return <span className={`status-pill status-${
 function EmptyState({ title, text }) { return <div className="dashboard-empty"><strong>{title}</strong><span>{text}</span></div>; }
 function InlineError({ children, ...rest }) { return <span className="inline-error" role="alert" {...rest}>{children}</span>; }
 function ProtectedMessage({ role }) { return <AuthFrame eyebrow="ACCOUNT ACCESS" title="PLEASE LOGIN TO CONTINUE." text={`This area is available to your ${role} account.`}><button type="button" className="btn btn-primary form-submit" onClick={() => navigate('/login')}>Go to Login</button></AuthFrame>; }
-function Field({ label, type = 'text', value = '', onChange = () => {}, placeholder = '', error, required = false, readOnly = false }) { const ownerEmailField = placeholder === 'owner@domain.com'; return <>{<label className="form-field"><span>{label}{required && <b>*</b>}</span><input type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} readOnly={readOnly} required={required} />{error && <InlineError>{error}</InlineError>}</label>}{ownerEmailField && <><label className="form-field"><span>Password<b>*</b></span><input name="turf-owner-password" type="password" placeholder="Create a password" required /></label><label className="form-field"><span>Confirm Password<b>*</b></span><input name="turf-owner-confirm-password" type="password" placeholder="Re-enter your password" required /></label></>}</>; }
+function Field({ label, type = 'text', value = '', onChange = () => {}, placeholder = '', error, required = false, readOnly = false, inputMode, maxLength }) { const ownerEmailField = placeholder === 'owner@domain.com'; return <>{<label className="form-field"><span>{label}{required && <b>*</b>}</span><input type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} readOnly={readOnly} required={required} inputMode={inputMode} maxLength={maxLength} />{error && <InlineError>{error}</InlineError>}</label>}{ownerEmailField && <><label className="form-field"><span>Password<b>*</b></span><input name="turf-owner-password" type="password" placeholder="Create a password" required /></label><label className="form-field"><span>Confirm Password<b>*</b></span><input name="turf-owner-confirm-password" type="password" placeholder="Re-enter your password" required /></label></>}</>; }
 
 export default PlayerApp;

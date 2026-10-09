@@ -1,5 +1,6 @@
 import { tournaments } from './tournaments.js';
 import { turfs } from './homeData.js';
+import { normalizeStaffBankDetails } from './staffBankDetails.js';
 
 const STORAGE_KEY = 'vadodara-sports-demo-store-v1';
 const SESSION_KEY = 'vadodara-sports-session-v1';
@@ -10,18 +11,22 @@ const ownerIds = turfs.reduce((owners, turf, index) => {
   return owners;
 }, {});
 
-// Canonical account roles. Player and Turf Owner accounts are created through the
-// public registration flows; Admin accounts are provisioned here (never publicly).
+// Canonical account roles. Player, Turf Owner, Coach, and Scorer accounts use
+// public registration flows; Admin accounts are provisioned here, never publicly.
 export const ROLES = {
   PLAYER: 'player',
   TURF_OWNER: 'turf-owner',
+  SCORER: 'scorer',
+  COACH: 'coach',
   ADMIN: 'admin',
 };
 
 // Roles a user may pick on the login screen.
 export const LOGIN_ROLES = [
   { value: ROLES.PLAYER, label: 'Player' },
-  { value: ROLES.TURF_OWNER, label: 'Turf Owner' },
+  { value: ROLES.TURF_OWNER, label: 'Turf' },
+  { value: ROLES.SCORER, label: 'Scorer' },
+  { value: ROLES.COACH, label: 'Coach' },
   { value: ROLES.ADMIN, label: 'Admin' },
 ];
 
@@ -43,8 +48,55 @@ const createAdmins = () => ([{
   password: 'admin123',
 }]);
 
+const normalizeStaffSportList = (value) => {
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+  if (!value) return [];
+  return String(value)
+    .split(/[;,|/]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
 const seedState = () => ({
   registeredTurfs: [],
+  scorers: [
+    {
+      id: 'demo-scorer',
+      role: ROLES.SCORER,
+      registrationType: ROLES.SCORER,
+      name: 'Riya Mehta',
+      fullName: 'Riya Mehta',
+      mobile: '9876543212',
+      email: 'riya.scorer@demo.com',
+      password: 'demo123',
+      address: 'Near Alkapuri, Vadodara',
+      experience: 4,
+      sport: 'Cricket',
+      sports: ['Cricket', 'Football'],
+      active: true,
+      status: 'active',
+      createdAt: '2026-09-01T11:00:00.000Z',
+    },
+  ],
+  coaches: [
+    {
+      id: 'demo-coach',
+      role: ROLES.COACH,
+      registrationType: ROLES.COACH,
+      name: 'Aman Shah',
+      fullName: 'Aman Shah',
+      mobile: '9876543213',
+      email: 'aman.coach@demo.com',
+      password: 'demo123',
+      address: 'Karelibaug, Vadodara',
+      experience: 7,
+      sport: 'Football',
+      sports: ['Football', 'Badminton'],
+      active: true,
+      status: 'active',
+      createdAt: '2026-09-01T12:00:00.000Z',
+    },
+  ],
   teams: [],
   registrations: [
     {
@@ -112,6 +164,8 @@ const seedState = () => ({
       profileImage: '',
       sportId: 'Cricket',
       selectedTurfId: 'united-sports-arena',
+      interestedTournaments: [],
+      interestedTournamentIds: [],
       createdAt: '2026-09-01T09:00:00.000Z',
     },
     {
@@ -133,6 +187,8 @@ const seedState = () => ({
       profileImage: '',
       sportId: 'Pickleball',
       selectedTurfId: 'huddle-arena',
+      interestedTournaments: [],
+      interestedTournamentIds: [],
       createdAt: '2026-09-02T09:00:00.000Z',
     },
   ],
@@ -204,6 +260,30 @@ const seedState = () => ({
       status: 'upcoming',
     },
   ],
+  staffApplications: [
+    {
+      id: 'staff-application-demo-1',
+      applicantId: 'demo-coach',
+      role: ROLES.COACH,
+      tournamentId: 'city-league-invitational',
+      tournamentName: 'City League Invitational',
+      sport: 'Football',
+      status: 'pending',
+      appliedAt: '2026-09-14T10:00:00.000Z',
+      note: 'Available for tactical coaching and match-day planning.',
+    },
+    {
+      id: 'staff-application-demo-2',
+      applicantId: 'demo-scorer',
+      role: ROLES.SCORER,
+      tournamentId: 'vmc-pickleball-challenge',
+      tournamentName: 'VMC Pickleball Challenge',
+      sport: 'Pickleball',
+      status: 'approved',
+      appliedAt: '2026-09-15T16:30:00.000Z',
+      note: 'Scoring coverage requested for doubles format.',
+    },
+  ],
 });
 
 const readJson = (key) => {
@@ -221,6 +301,9 @@ const migrateState = (stored) => {
     ...defaults,
     ...stored,
     admins: Array.isArray(stored.admins) && stored.admins.length ? stored.admins : defaults.admins,
+    scorers: Array.isArray(stored.scorers) ? stored.scorers : defaults.scorers,
+    coaches: Array.isArray(stored.coaches) ? stored.coaches : defaults.coaches,
+    staffApplications: Array.isArray(stored.staffApplications) ? stored.staffApplications : defaults.staffApplications,
     platformSettings: {
       ...defaults.platformSettings,
       ...(stored.platformSettings || {}),
@@ -274,6 +357,24 @@ const accountsByRole = (state, role) => {
       password: owner.password,
       active: owner.active !== false,
       turfIds: owner.turfIds || [],
+    }));
+  }
+  if (role === ROLES.SCORER) {
+    return (state.scorers || []).map((scorer) => ({
+      id: scorer.id,
+      role: ROLES.SCORER,
+      email: scorer.email,
+      password: scorer.password,
+      active: scorer.active !== false,
+    }));
+  }
+  if (role === ROLES.COACH) {
+    return (state.coaches || []).map((coach) => ({
+      id: coach.id,
+      role: ROLES.COACH,
+      email: coach.email,
+      password: coach.password,
+      active: coach.active !== false,
     }));
   }
   if (role === ROLES.ADMIN) {
@@ -333,6 +434,8 @@ export const authenticateUser = (requestedRole, email, password) => {
 export const dashboardPathForRole = (role) => {
   if (role === ROLES.PLAYER) return '/player/dashboard';
   if (role === ROLES.TURF_OWNER) return '/turf-owner/dashboard';
+  if (role === ROLES.SCORER) return '/scorer/profile';
+  if (role === ROLES.COACH) return '/coach/profile';
   if (role === ROLES.ADMIN) return '/admin/dashboard';
   return '/login';
 };
@@ -404,6 +507,9 @@ export const getTurfOwners = () => getDemoState().owners || [];
 export const getTeams = () => getDemoState().teams || [];
 export const getRegistrations = () => getDemoState().registrations || [];
 export const getMatches = () => getDemoState().matches || [];
+export const getCoaches = () => getDemoState().coaches || [];
+export const getScorers = () => getDemoState().scorers || [];
+export const getStaffApplications = () => getDemoState().staffApplications || [];
 
 export const normalizeTurf = (turf = {}) => ({
   ...turf,
@@ -442,6 +548,95 @@ export const findDuplicatePlayer = (state, form) => state.players.find((player) 
 export const findDuplicateContact = (state, form) => state.players.find((player) => (
   player.mobile === form.mobile || String(player.email || '').toLowerCase() === form.email.trim().toLowerCase()
 ));
+
+export const createDemoStaffRegistration = (state, form, role) => {
+  if (![ROLES.COACH, ROLES.SCORER].includes(role)) {
+    return { ok: false, error: 'Select a valid registration type.' };
+  }
+
+  const name = String(form.fullName || '').trim();
+  const mobile = String(form.mobile || '').replace(/\s/g, '');
+  const email = String(form.email || '').trim().toLowerCase();
+  const address = String(form.address || '').trim();
+  const sportValues = normalizeStaffSportList(form.sports || form.sport || '');
+  const experience = Number(form.experience);
+  const password = String(form.password || '');
+  const normalizedBank = normalizeStaffBankDetails(form.bankDetails);
+
+  if (!name || !/^\d{10}$/.test(mobile) || !/^\S+@\S+\.\S+$/.test(email) || !address
+    || !Number.isFinite(experience) || experience < 0 || !sportValues.length || password.length < 6 || !normalizedBank.valid) {
+    return { ok: false, error: 'Complete all required fields with valid information.' };
+  }
+
+  const accountCollections = [state.players, state.owners, state.scorers, state.coaches, state.admins];
+  if (accountCollections.flat().some((account) => (
+    String(account.email || '').trim().toLowerCase() === email
+    || String(account.mobile || '').replace(/\s/g, '') === mobile
+  ))) {
+    return { ok: false, error: 'This email or mobile number is already registered. Please login instead.' };
+  }
+
+  const primarySport = sportValues[0];
+  const profile = {
+    id: createId(role),
+    role,
+    registrationType: role,
+    name,
+    fullName: name,
+    mobile,
+    email,
+    address,
+    experience,
+    sport: primarySport,
+    sports: sportValues,
+    sportId: primarySport,
+    bankDetails: normalizedBank.bankDetails,
+    password,
+    active: true,
+    status: 'active',
+    createdAt: new Date().toISOString(),
+  };
+  const collection = role === ROLES.COACH ? 'coaches' : 'scorers';
+  state[collection] = [...(state[collection] || []), profile];
+
+  return {
+    ok: true,
+    profile,
+    session: { userId: profile.id, role, email, issuedAt: new Date().toISOString() },
+  };
+};
+
+export const updateStaffBankDetails = (state, profileId, role, values) => {
+  if (![ROLES.COACH, ROLES.SCORER].includes(role)) {
+    return { ok: false, error: 'Only Coach or Scorer profiles can update bank details.' };
+  }
+  const normalized = normalizeStaffBankDetails(values);
+  if (!normalized.valid) return { ok: false, error: 'Check the bank details and try again.', errors: normalized.errors };
+
+  const collection = role === ROLES.COACH ? 'coaches' : 'scorers';
+  const profile = (state[collection] || []).find((account) => account.id === profileId && account.role === role);
+  if (!profile) return { ok: false, error: 'Your staff profile could not be found.' };
+
+  profile.bankDetails = normalized.bankDetails;
+  return { ok: true, profile };
+};
+
+export const createDemoStaffApplication = (state, application) => {
+  const nextApplication = {
+    id: createId('staff-application'),
+    applicantId: application.applicantId,
+    role: application.role,
+    tournamentId: application.tournamentId,
+    tournamentName: application.tournamentName,
+    sport: application.sport || 'General',
+    status: 'pending',
+    note: application.note || '',
+    appliedAt: new Date().toISOString(),
+  };
+
+  state.staffApplications = [...(state.staffApplications || []), nextApplication];
+  return nextApplication;
+};
 
 export const createDemoPlayerRegistration = (state, form) => {
   const normalizedForm = { ...form };
@@ -497,6 +692,8 @@ export const createDemoPlayerRegistration = (state, form) => {
     sportIds: selectedGames.map((name) => name).filter(Boolean),
     sports: selectedGames,
     games: selectedGames,
+    interestedTournaments: [],
+    interestedTournamentIds: [],
     createdAt: new Date().toISOString(),
   };
 

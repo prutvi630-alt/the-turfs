@@ -136,7 +136,7 @@ export function Drawer({ open, title, onClose, children }) {
 export function Toast({ toast, onDismiss }) {
   useEffect(() => {
     if (!toast) return undefined;
-    const timer = window.setTimeout(onDismiss, 3200);
+    const timer = window.setTimeout(onDismiss, toast.duration || 3200);
     return () => window.clearTimeout(timer);
   }, [toast, onDismiss]);
 

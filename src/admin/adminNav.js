@@ -25,6 +25,7 @@ export const adminNav = [
   },
   { id: 'registrations', label: 'Registrations', path: '/admin/registrations', icon: 'clipboard' },
   { id: 'players', label: 'Players', path: '/admin/players', icon: 'users' },
+  { id: 'staff', label: 'Coaches & Scorers', path: '/admin/staff', icon: 'user' },
   { id: 'teams', label: 'Teams', path: '/admin/teams', icon: 'shield' },
   { id: 'turf-owners', label: 'Turf Owners', path: '/admin/turf-owners', icon: 'badge' },
   { id: 'turfs', label: 'Turfs', path: '/admin/turfs', icon: 'turf' },
@@ -82,6 +83,9 @@ export const resolvePageMeta = (path, search = '') => {
   // Deep pages that are not nav leaves get their own title/breadcrumb.
   if (clean === '/admin/tournaments/create') {
     return { title: 'Create Tournament', crumbs: ['Admin', 'Tournaments', 'Create Tournament'] };
+  }
+  if (clean === '/admin/staff') {
+    return { title: 'Coaches & Scorers', crumbs: ['Admin', 'Coaches & Scorers'] };
   }
   if (clean.startsWith('/admin/tournaments/')) {
     return { title: 'Tournament Detail', crumbs: ['Admin', 'Tournaments', 'Tournament Detail'] };

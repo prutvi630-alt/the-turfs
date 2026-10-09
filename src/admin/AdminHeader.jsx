@@ -8,6 +8,7 @@ import AdminIcon from './AdminIcon';
 function AdminHeader({ title, crumbs = [], admin, onToggleSidebar, onNavigate, onLogout, notificationCount = 0 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
+  const parentCrumbs = crumbs.slice(0, -1);
 
   useEffect(() => {
     if (!menuOpen) return undefined;
@@ -35,14 +36,16 @@ function AdminHeader({ title, crumbs = [], admin, onToggleSidebar, onNavigate, o
       </button>
 
       <div className="admin-header-heading">
-        <nav className="admin-breadcrumb" aria-label="Breadcrumb">
-          {crumbs.map((crumb, index) => (
-            <span key={`${crumb}-${index}`} className={index === crumbs.length - 1 ? 'is-current' : ''}>
-              {crumb}
-              {index < crumbs.length - 1 && <i aria-hidden="true">/</i>}
-            </span>
-          ))}
-        </nav>
+        {parentCrumbs.length > 0 && (
+          <nav className="admin-breadcrumb" aria-label="Breadcrumb">
+            {parentCrumbs.map((crumb, index) => (
+              <span key={`${crumb}-${index}`}>
+                {crumb}
+                {index < parentCrumbs.length - 1 && <i aria-hidden="true">/</i>}
+              </span>
+            ))}
+          </nav>
+        )}
         <h1 className="admin-header-title">{title}</h1>
       </div>
 

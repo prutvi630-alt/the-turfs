@@ -18,8 +18,20 @@ import { getAllTurfs, getBookings, getDemoState } from './demoStore.js';
 const CANCELLED_STATUSES = ['cancelled', 'canceled'];
 const COMPLETED_STATUSES = ['completed', 'finished', 'concluded'];
 const ONGOING_STATUSES = ['live', 'ongoing', 'in progress', 'in-progress'];
+const INACTIVE_INTEREST_STATUSES = ['cancelled', 'canceled', 'completed', 'finished', 'concluded', 'live', 'ongoing', 'closed', 'registration closed', 'expired'];
 
 const startTime = (tournament) => new Date(`${tournament.date}T00:00:00`);
+
+export const isTournamentInterestActive = (tournament, now = new Date()) => {
+  if (!tournament?.id || INACTIVE_INTEREST_STATUSES.includes(String(tournament.status || '').trim().toLowerCase())) return false;
+  const closingDate = tournament.registrationEnd || tournament.date || tournament.startDate;
+  if (!closingDate) return true;
+  const closingTime = new Date(`${closingDate}T00:00:00`);
+  if (Number.isNaN(closingTime.getTime())) return false;
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  return closingTime >= today;
+};
 
 export const tournamentStage = (tournament, now = new Date()) => {
   const status = String(tournament.status || '').toLowerCase();

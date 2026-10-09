@@ -3,6 +3,7 @@ import AdminIcon from './AdminIcon';
 import { normalizePath, route } from '../config/routes';
 import AdminDashboard from './AdminDashboard';
 import PlayersPage from './PlayersPage';
+import StaffManagementPage from './StaffManagementPage';
 import TurfOwnersPage from './TurfOwnersPage';
 import TurfsPage from './TurfsPage';
 import TurfsCreatePage from './TurfsCreatePage';
@@ -35,6 +36,7 @@ const sectionMeta = {
   '/admin/tournaments': { kicker: 'TOURNAMENTS', title: 'TOURNAMENT MANAGEMENT', text: 'Create, schedule and manage tournaments across every stage of their lifecycle.' },
   '/admin/registrations': { kicker: 'REGISTRATIONS', title: 'REGISTRATIONS', text: 'Review player, team and tournament registrations awaiting approval.' },
   '/admin/players': { kicker: 'PLAYERS', title: 'PLAYER MANAGEMENT', text: 'Search, verify and manage every registered player on the platform.' },
+  '/admin/staff': { kicker: 'COACHES & SCORERS', title: 'STAFF MANAGEMENT', text: 'Review coach and scorer registrations, assignments and player support coverage.' },
   '/admin/teams': { kicker: 'TEAMS', title: 'TEAM MANAGEMENT', text: 'Teams created by turf owners and their squads will be managed here.' },
   '/admin/turf-owners': { kicker: 'TURF OWNERS', title: 'TURF OWNER MANAGEMENT', text: 'Verify turf owners and manage their access to the platform.' },
   '/admin/turfs': { kicker: 'TURFS', title: 'TURF MANAGEMENT', text: 'Approve and manage every registered venue and its listing details.' },
@@ -75,6 +77,14 @@ function AdminPage({ admin, state, logout }) {
     return (
       <AdminLayout admin={admin} notificationCount={notificationCount} onLogout={logout}>
         <PlayersPage />
+      </AdminLayout>
+    );
+  }
+
+  if (base === '/admin/staff') {
+    return (
+      <AdminLayout admin={admin} notificationCount={notificationCount} onLogout={logout}>
+        <StaffManagementPage />
       </AdminLayout>
     );
   }

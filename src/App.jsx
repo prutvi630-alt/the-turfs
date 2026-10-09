@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { sports } from './data/homeData';
 import { getAllTournaments } from './data/dashboardSelectors';
+import { formatTournamentFee } from './data/tournamentFees';
+import { getTournamentRegistrationType, PLAYER_TOURNAMENT_REGISTRATION_FEE } from './data/adminRegistrations';
 import { getAllTurfs } from './data/demoStore';
 import AboutPage from './AboutPage';
 import TournamentPage from './TournamentPage';
-import PlayerApp from './PlayerApp';
+import PlayerApp, { LoginModalHost } from './PlayerApp';
 import BookingPage from './BookingPage';
 import GlobalHeader from './GlobalHeader';
 import Footer from './Footer';
@@ -44,6 +46,7 @@ const popularSports = ['cricket', 'football', 'pickleball', 'tennis', 'swimming'
   .filter(Boolean);
 
 const turfs = getAllTurfs();
+const isCompactViewport = () => window.matchMedia('(max-width: 640px)').matches;
 const tournaments = getAllTournaments();
 const upcomingTournaments = tournaments
   .filter((tournament) => {
@@ -125,6 +128,10 @@ function FeatureIcon({ type }) {
 }
 
 function App() {
+  return <><AppContent /><LoginModalHost /></>;
+}
+
+function AppContent() {
   const path = normalizePath();
 
   if (path === '/about') {
@@ -143,7 +150,7 @@ function App() {
     return <PlayersPage />;
   }
 
-  if (['/signup', '/login', '/player', '/turf-owner', '/admin'].some((route) => path.startsWith(route))) {
+  if (['/signup', '/login', '/player', '/turf-owner', '/scorer', '/coach', '/admin'].some((route) => path.startsWith(route))) {
     return <PlayerApp />;
   }
 
@@ -158,7 +165,7 @@ function App() {
   const [areaFilter, setAreaFilter] = useState('All');
   const [showAllSports, setShowAllSports] = useState(false);
   const [showAllTurfs, setShowAllTurfs] = useState(false);
-  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 640 : false);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? isCompactViewport() : false);
 
   const areaOptions = useMemo(
     () => ['All', ...new Set(turfs.map((turf) => turf.area).filter(Boolean))],
@@ -166,7 +173,7 @@ function App() {
   );
 
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= 640);
+    const handleResize = () => setIsMobile(isCompactViewport());
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -545,7 +552,9 @@ function App() {
                       <span>◷ {tournament.dateLabel}</span>
                       <span>⌖ {tournament.area}, Vadodara</span>
                       <span>◇ {tournament.format}</span>
-                      {tournament.entryFee && <span>{tournament.entryFee}</span>}
+                      <span>{getTournamentRegistrationType(tournament) === 'Individual'
+                        ? `Player fee: ₹${PLAYER_TOURNAMENT_REGISTRATION_FEE} per player`
+                        : `Team fee: ${formatTournamentFee(tournament.entryFee)} per team`}</span>
                     </div>
                     <div className="discovery-card-footer">
                       <span className="status-badge status-upcoming">UPCOMING</span>

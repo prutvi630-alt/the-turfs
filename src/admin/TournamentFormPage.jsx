@@ -13,6 +13,7 @@ import {
 } from '../data/adminTournaments';
 import { getAllTurfs, getDemoState } from '../data/demoStore';
 import { getAdminSettings } from '../data/adminSettings';
+import { getConfiguredTournamentFeeAmount } from '../data/tournamentFees';
 
 // TournamentFormPage — /admin/tournaments/create (also ?edit=<id>)
 //
@@ -22,6 +23,16 @@ import { getAdminSettings } from '../data/adminSettings';
 // page reads through the shared merged list.
 
 const navigate = (href) => { window.location.href = route(href); };
+
+const formatDateInput = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+const offsetDateInput = (value, days) => {
+  if (!value) return '';
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day + days);
+  return formatDateInput(date);
+};
+const earliestDateInput = (...values) => values.filter(Boolean).sort()[0] || undefined;
+const latestDateInput = (...values) => values.filter(Boolean).sort().slice(-1)[0] || undefined;
 
 const blankForm = {
   name: '',
@@ -69,6 +80,7 @@ const blankForm = {
 const recordToForm = (record) => ({
   ...blankForm,
   ...record,
+  entryFee: getConfiguredTournamentFeeAmount(record.entryFee) ?? '',
   format: record.format || record.matchType || '',
   matchType: record.matchType || record.format || '',
   venueId: record.venueId || '',
@@ -112,6 +124,38 @@ function TournamentFormPage() {
   }, [editId]);
 
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const updateDate = (key, value) => {
+    setForm((current) => {
+      const next = { ...current, [key]: value };
+
+      if (key === 'registrationStart') {
+        if (next.registrationEnd && next.registrationEnd < value) next.registrationEnd = '';
+        const registrationBoundary = next.registrationEnd || next.registrationStart;
+        if (next.startDate && registrationBoundary && next.startDate <= registrationBoundary) {
+          next.startDate = '';
+          next.endDate = '';
+        }
+      }
+
+      if (key === 'registrationEnd' && value && next.startDate && next.startDate <= value) {
+        next.startDate = '';
+        next.endDate = '';
+      }
+
+      if (key === 'startDate' && (!value || (next.endDate && next.endDate < value))) {
+        next.endDate = '';
+      }
+
+      return next;
+    });
+    setErrors((current) => {
+      const next = { ...current };
+      delete next.registrationEnd;
+      delete next.startDate;
+      delete next.endDate;
+      return next;
+    });
+  };
 
   const formats = SPORT_FORMATS[form?.sport] || [];
 
@@ -125,6 +169,19 @@ function TournamentFormPage() {
 
   if (!form) return null;
 
+  const today = formatDateInput(new Date());
+  const registrationStartMax = earliestDateInput(
+    form.registrationEnd,
+    form.startDate ? offsetDateInput(form.startDate, -1) : ''
+  );
+  const registrationEndMax = form.startDate ? offsetDateInput(form.startDate, -1) : undefined;
+  const tournamentStartMin = latestDateInput(
+    today,
+    offsetDateInput(form.registrationEnd, 1),
+    offsetDateInput(form.registrationStart, 1)
+  );
+  const tournamentEndMin = latestDateInput(today, form.startDate);
+
   const validate = () => {
     const next = validateTournamentDates(form);
     if (!form.name.trim()) next.name = 'Tournament name is required.';
@@ -134,6 +191,11 @@ function TournamentFormPage() {
     if (form.minTeams && form.maxTeams && Number(form.minTeams) > Number(form.maxTeams)) next.maxTeams = 'Maximum teams must be greater than minimum teams.';
     ['minTeams', 'maxTeams', 'minPlayers', 'maxPlayers'].forEach((key) => { if (form[key] && Number(form[key]) < 1) next[key] = 'Value must be at least 1.'; });
     ['prizePool', 'firstPrize', 'secondPrize', 'thirdPrize'].forEach((key) => { if (form[key] && !/^[^\d]*\d[\d,]*(?:\.\d+)?/.test(form[key])) next[key] = 'Enter a valid prize amount.'; });
+    if (form.entryFee && getConfiguredTournamentFeeAmount(form.entryFee) === null) {
+      next.entryFee = 'Enter a valid fee greater than ₹0, with up to two decimal places.';
+    } else if (form.registrationType === 'Team' && getConfiguredTournamentFeeAmount(form.entryFee) === null) {
+      next.entryFee = 'A registration fee greater than ₹0 is required for team tournaments.';
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -141,7 +203,10 @@ function TournamentFormPage() {
   const persist = (publish) => {
     if (savingMode) return;
     // Publish requires a clean pass over dates + required fields; drafts may be partial.
-    if (publish && !validate()) { setSection('basic'); return; }
+    if (publish && !validate()) {
+      setSection(form.registrationType === 'Team' && getConfiguredTournamentFeeAmount(form.entryFee) === null ? 'registration' : 'basic');
+      return;
+    }
     if (!publish && !form.name.trim()) { setErrors({ name: 'A draft still needs a name.' }); setSection('basic'); return; }
     setSavingMode(publish ? 'publishing' : 'saving');
 
@@ -272,10 +337,10 @@ function TournamentFormPage() {
           <div className="admin-form-section">
             <h4>Dates</h4>
             <div className="admin-form-grid">
-              <label className="form-field"><span>Registration start</span><input type="date" value={form.registrationStart} onChange={(e) => update('registrationStart', e.target.value)} /></label>
-              <label className="form-field"><span>Registration end</span><input type="date" value={form.registrationEnd} onChange={(e) => update('registrationEnd', e.target.value)} />{errors.registrationEnd && <small className="admin-field-error">{errors.registrationEnd}</small>}</label>
-              <label className="form-field"><span>Tournament start *</span><input type="date" value={form.startDate} onChange={(e) => update('startDate', e.target.value)} />{errors.startDate && <small className="admin-field-error">{errors.startDate}</small>}</label>
-              <label className="form-field"><span>Tournament end</span><input type="date" value={form.endDate} onChange={(e) => update('endDate', e.target.value)} />{errors.endDate && <small className="admin-field-error">{errors.endDate}</small>}</label>
+              <label className="form-field"><span>Registration start</span><input type="date" value={form.registrationStart} max={registrationStartMax} onChange={(e) => updateDate('registrationStart', e.target.value)} /></label>
+              <label className="form-field"><span>Registration end</span><input type="date" value={form.registrationEnd} min={form.registrationStart || undefined} max={registrationEndMax} onChange={(e) => updateDate('registrationEnd', e.target.value)} />{errors.registrationEnd && <small className="admin-field-error">{errors.registrationEnd}</small>}</label>
+              <label className="form-field"><span>Tournament start *</span><input type="date" value={form.startDate} min={tournamentStartMin} onChange={(e) => updateDate('startDate', e.target.value)} />{errors.startDate && <small className="admin-field-error">{errors.startDate}</small>}</label>
+              <label className="form-field"><span>Tournament end</span><input type="date" value={form.endDate} min={tournamentEndMin} onChange={(e) => updateDate('endDate', e.target.value)} />{errors.endDate && <small className="admin-field-error">{errors.endDate}</small>}</label>
             </div>
             <p className="admin-detail-empty">Registration must close before the tournament starts. End dates must fall after their start dates.</p>
           </div>
@@ -302,7 +367,7 @@ function TournamentFormPage() {
                   <label className="form-field"><span>Minimum players</span><input type="number" min="0" value={form.minPlayers} onChange={(e) => update('minPlayers', e.target.value)} /></label>
                 </>
               )}
-              <label className="form-field"><span>Entry fee</span><input value={form.entryFee} onChange={(e) => update('entryFee', e.target.value)} placeholder="e.g. ₹1,500 per team" /></label>
+              <label className="form-field"><span>Tournament registration fee{form.registrationType === 'Team' ? ' *' : ''}</span><input type="number" min="0.01" step="0.01" inputMode="decimal" required={form.registrationType === 'Team'} value={form.entryFee} onChange={(e) => update('entryFee', e.target.value)} placeholder="e.g. 1500" aria-invalid={Boolean(errors.entryFee)} />{errors.entryFee && <small className="admin-field-error">{errors.entryFee}</small>}<small className="admin-detail-empty">{form.registrationType === 'Team' ? 'This exact fee is charged per team. Existing individual registrations remain free.' : 'Individual registrations remain free under the current registration rules.'}</small></label>
             </div>
           </div>
         )}
@@ -372,12 +437,12 @@ function TournamentFormPage() {
                 {form.coverImage && <img className="admin-image-single" src={form.coverImage} alt="Cover preview" />}
               </div>
               <div className="form-field">
-                <span>Tournament poster</span>
+                <span>Tournament main image / poster</span>
                 <label className="admin-upload-drop compact">
                   <input type="file" accept="image/*" onChange={(e) => handleCover(e, 'posterImage')} />
-                  <AdminIcon name="trophy" size={18} /><span>Upload poster</span>
+                  <AdminIcon name="trophy" size={18} /><span>Upload main image / poster</span>
                 </label>
-                {form.posterImage && <img className="admin-image-single" src={form.posterImage} alt="Poster preview" />}
+                {form.posterImage && <img className="admin-image-single admin-image-single-poster" src={form.posterImage} alt="Main image / poster preview" />}
               </div>
             </div>
           </div>

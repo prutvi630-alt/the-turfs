@@ -1,6 +1,7 @@
 import { getAllTurfs, getDemoState } from './demoStore.js';
 import { getAllTournaments, tournamentStage } from './dashboardSelectors.js';
 import { TOURNAMENT_STATUS, isDraft, isPublished } from './adminTournaments.js';
+import { formatTournamentFee } from './tournamentFees.js';
 
 // ---------------------------------------------------------------------------
 // Admin tournament selectors
@@ -56,6 +57,9 @@ export const getTournamentRows = () => {
       draft: isDraft(tournament),
       cancellationReason: tournament.cancellationReason || '',
       prizePool: tournament.prizePool || '',
+      registrationFee: String(tournament.registrationType || 'Team').toLowerCase() === 'individual'
+        ? '₹0 per player'
+        : `${formatTournamentFee(tournament.entryFee)} per team`,
       image: tournament.image || '',
       description: tournament.description || '',
       teams: tournament.teams || [],

@@ -1,6 +1,7 @@
 import { createId, getDemoState, saveDemoState } from './demoStore.js';
 import { ACTIVITY_TYPES, recordActivity } from './activityStore.js';
 import { tournaments as catalogueTournaments } from './tournaments.js';
+import { getConfiguredTournamentFeeAmount } from './tournamentFees.js';
 
 // ---------------------------------------------------------------------------
 // Admin tournament management
@@ -37,6 +38,11 @@ export const TOURNAMENT_STATUSES = Object.values(TOURNAMENT_STATUS);
 
 // Statuses considered "not visible to the public".
 const HIDDEN_STATUSES = [TOURNAMENT_STATUS.DRAFT, 'Unpublished'];
+const FEE_REQUIRED_STATUSES = [
+  TOURNAMENT_STATUS.PUBLISHED,
+  TOURNAMENT_STATUS.REGISTRATION_OPEN,
+  TOURNAMENT_STATUS.UPCOMING,
+];
 
 export const isPublished = (tournament = {}) =>
   !HIDDEN_STATUSES.includes(tournament.status) && tournament.status !== undefined;
@@ -107,7 +113,7 @@ const buildRecord = (input, existing = {}) => {
     minTeams: numeric(input.minTeams),
     maxPlayers: numeric(input.maxPlayers),
     minPlayers: numeric(input.minPlayers),
-    entryFee: input.entryFee || '',
+    entryFee: input.entryFee === undefined || input.entryFee === null ? existing.entryFee || '' : String(input.entryFee).trim(),
 
     // Prizes
     prizePool: input.prizePool || '',
@@ -153,6 +159,15 @@ export const createTournament = (input, options = {}) => {
   const status = options.publish && input.status !== TOURNAMENT_STATUS.DRAFT
     ? (input.status || TOURNAMENT_STATUS.PUBLISHED)
     : (input.status || TOURNAMENT_STATUS.DRAFT);
+  const feeAmount = getConfiguredTournamentFeeAmount(input.entryFee);
+  const isTeamTournament = String(input.registrationType || 'Team').toLowerCase() !== 'individual';
+  const feeRequired = FEE_REQUIRED_STATUSES.includes(status);
+  if (input.entryFee !== undefined && input.entryFee !== null && input.entryFee !== '' && feeAmount === null) {
+    return { ok: false, error: 'Enter a valid tournament fee greater than ₹0.' };
+  }
+  if (isTeamTournament && feeRequired && feeAmount === null) {
+    return { ok: false, error: 'A valid tournament fee greater than ₹0 is required before publishing a team tournament.' };
+  }
 
   const record = buildRecord({ ...input, status }, {});
   record.status = status;
@@ -187,6 +202,16 @@ export const updateTournament = (id, input, options = {}) => {
 
   const existing = list[index];
   const status = options.status || input.status || existing.status;
+  const feeValue = input.entryFee === undefined ? existing.entryFee : input.entryFee;
+  const feeAmount = getConfiguredTournamentFeeAmount(feeValue);
+  const isTeamTournament = String(input.registrationType || existing.registrationType || 'Team').toLowerCase() !== 'individual';
+  const feeRequired = FEE_REQUIRED_STATUSES.includes(status);
+  if (feeValue !== undefined && feeValue !== null && feeValue !== '' && feeAmount === null) {
+    return { ok: false, error: 'Enter a valid tournament fee greater than ₹0.' };
+  }
+  if (isTeamTournament && feeRequired && feeAmount === null) {
+    return { ok: false, error: 'A valid tournament fee greater than ₹0 is required before publishing a team tournament.' };
+  }
   const updated = buildRecord(input, existing);
   updated.status = status;
   updated.published = !HIDDEN_STATUSES.includes(status);
@@ -216,6 +241,12 @@ export const setTournamentStatus = (id, status, options = {}) => {
     // Static catalogue tournaments: only lifecycle overrides on the catalogue are
     // out of scope, so report clearly rather than mutating shared seed data.
     return { ok: false, error: 'Only admin-created tournaments can change status here.', staticTournament: true };
+  }
+  const feeAmount = getConfiguredTournamentFeeAmount(tournament.entryFee);
+  if (FEE_REQUIRED_STATUSES.includes(status)
+    && String(tournament.registrationType || 'Team').toLowerCase() !== 'individual'
+    && feeAmount === null) {
+    return { ok: false, error: 'A valid tournament fee greater than ₹0 is required before publishing a team tournament.' };
   }
 
   tournament.status = status;
@@ -309,14 +340,18 @@ export const deleteTournament = (id, options = {}) => {
 export const validateTournamentDates = (form) => {
   const errors = {};
   const toTime = (value) => (value ? new Date(`${value}T00:00:00`).getTime() : null);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const regStart = toTime(form.registrationStart);
   const regEnd = toTime(form.registrationEnd);
   const start = toTime(form.startDate);
   const end = toTime(form.endDate);
 
-  if (regStart && regEnd && regEnd < regStart) errors.registrationEnd = 'Registration end must be after registration start.';
+  if (regStart && regEnd && regEnd < regStart) errors.registrationEnd = 'Registration end must be on or after registration start.';
   if (start && end && end < start) errors.endDate = 'Tournament end must be after tournament start.';
-  if (regEnd && start && start < regEnd) errors.startDate = 'Tournament start must be on or after registration end.';
-  if (regStart && start && start < regStart) errors.startDate = 'Tournament start must be after registration start.';
+  if (regEnd && start && start <= regEnd) errors.startDate = 'Tournament start must be after registration end.';
+  else if (regStart && start && start <= regStart) errors.startDate = 'Tournament start must be after registration start.';
+  if (!start) errors.startDate = 'Tournament start is required.';
+  if (start && start < today.getTime() && !errors.startDate) errors.startDate = 'Tournament start cannot be in the past.';
   return errors;
 };

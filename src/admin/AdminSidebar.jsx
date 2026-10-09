@@ -74,6 +74,7 @@ function AdminSidebar({ activeId, path, search, onNavigate, onLogout, collapsed 
         <button
           type="button"
           className={`admin-nav-item ${activeId === item.id ? 'active' : ''}`}
+          aria-current={activeId === item.id ? 'page' : undefined}
           onClick={() => onNavigate(item.path)}
           title={collapsed ? item.label : undefined}
         >

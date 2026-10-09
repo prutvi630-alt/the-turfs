@@ -6,6 +6,8 @@ import { StatusPill } from './AdminUI';
 import { getAllTournaments } from '../data/dashboardSelectors';
 import MatchesPage from './MatchesPage';
 import { getTournamentBracket } from '../data/matchStore';
+import { formatTournamentFee } from '../data/tournamentFees';
+import { PLAYER_TOURNAMENT_REGISTRATION_FEE } from '../data/adminRegistrations';
 
 const tabs = ['Overview', 'Registrations', 'Teams', 'Matches', 'Results', 'Bracket', 'Settings'];
 const navigate = (href) => { window.location.href = route(href); };
@@ -18,7 +20,7 @@ export default function TournamentDetailPage({ tournamentId }) {
   return <div className="admin-list-page tournament-management-page">
     <button type="button" className="admin-back-link" onClick={() => navigate('/admin/tournaments')}><AdminIcon name="chevron" size={14} /> All tournaments</button>
     <section className="tournament-admin-banner" style={{ backgroundImage: `linear-gradient(90deg, rgba(5, 12, 10, 0.96), rgba(5, 12, 10, 0.55)), url('${tournament.image || ''}')` }}><div><span className="section-kicker">{tournament.sport} TOURNAMENT</span><h2>{tournament.name}</h2><p>{tournament.venueName || tournament.area} · {tournament.dateLabel || tournament.date}</p></div><StatusPill status={tournament.status} /></section>
-    <div className="tournament-admin-stats"><Mini label="Sport" value={tournament.sport} /><Mini label="Venue" value={tournament.venueName || tournament.area} /><Mini label="Teams" value={`${tournament.registeredTeams || 0} / ${tournament.teamCapacity || tournament.maxTeams || '—'}`} /><Mini label="Registration" value={tournament.status === 'Published' ? 'Open' : tournament.status} /><Mini label="Prize pool" value={tournament.prizePool || '—'} /><Mini label="Entry fee" value={tournament.entryFee || '—'} /></div>
+    <div className="tournament-admin-stats"><Mini label="Sport" value={tournament.sport} /><Mini label="Venue" value={tournament.venueName || tournament.area} /><Mini label="Teams" value={`${tournament.registeredTeams || 0} / ${tournament.teamCapacity || tournament.maxTeams || '—'}`} /><Mini label="Registration" value={tournament.status === 'Published' ? 'Open' : tournament.status} /><Mini label="Prize pool" value={tournament.prizePool || '—'} /><Mini label={String(tournament.registrationType || 'Team').toLowerCase() === 'individual' ? 'Player fee' : 'Team fee'} value={String(tournament.registrationType || 'Team').toLowerCase() === 'individual' ? `₹${PLAYER_TOURNAMENT_REGISTRATION_FEE} per player` : `${formatTournamentFee(tournament.entryFee)} per team`} /></div>
     <nav className="admin-section-tabs tournament-admin-tabs" aria-label="Tournament sections">{tabs.map((item) => <button type="button" key={item} className={`admin-section-tab ${tab === item ? 'active' : ''}`} onClick={() => setTab(item)}>{item}</button>)}</nav>
     {tab === 'Registrations' ? <AdminRegistrationsPage tournamentId={tournament.id} /> : tab === 'Matches' || tab === 'Results' ? <MatchesPage tournamentId={tournament.id} /> : tab === 'Bracket' ? <Bracket tournament={tournament} /> : <Overview tournament={tournament} tab={tab} />}
   </div>;
